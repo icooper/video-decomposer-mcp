@@ -1,4 +1,5 @@
 import logging
+import warnings
 from unittest.mock import patch
 
 from video_decomposer_mcp import configure_logging
@@ -49,3 +50,39 @@ def test_configure_logging_invalid_env(mock_basic):
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
+
+
+def test_warning_filters_set_at_module_level():
+    """Warning filters are set at import time so they apply before third-party imports."""
+    import importlib
+
+    import video_decomposer_mcp
+
+    importlib.reload(video_decomposer_mcp)
+    filter_patterns = [f[1].pattern if hasattr(f[1], "pattern") else "" for f in warnings.filters]
+    assert any("TensorFloat-32" in p for p in filter_patterns)
+    assert any("degrees of freedom" in p for p in filter_patterns)
+
+
+def test_configure_logging_sets_third_party_logger_levels():
+    configure_logging(logging.ERROR)
+    for name in ("whisperx", "lightning", "lightning.pytorch"):
+        lib_logger = logging.getLogger(name)
+        assert lib_logger.level == logging.ERROR
+        for handler in lib_logger.handlers:
+            assert handler.level == logging.ERROR
+
+
+def test_configure_logging_patches_uvicorn_config():
+    import uvicorn.config
+
+    configure_logging(logging.INFO)
+    assert (
+        uvicorn.config.LOGGING_CONFIG["formatters"]["default"]["fmt"]
+        == "%(asctime)s %(name)s %(levelname)s %(message)s"
+    )
+    assert uvicorn.config.LOGGING_CONFIG["formatters"]["default"]["datefmt"] == "%Y-%m-%dT%H:%M:%S"
+    assert (
+        uvicorn.config.LOGGING_CONFIG["formatters"]["access"]["fmt"] == "%(asctime)s %(name)s %(levelname)s %(message)s"
+    )
+    assert uvicorn.config.LOGGING_CONFIG["formatters"]["access"]["datefmt"] == "%Y-%m-%dT%H:%M:%S"

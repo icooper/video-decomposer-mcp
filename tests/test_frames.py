@@ -1,8 +1,8 @@
-import base64
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+from mcp.server.fastmcp import Image
 
 from video_decomposer_mcp.tools.frames import (
     _extract_frame_at,
@@ -66,6 +66,20 @@ def test_extract_frame_at_resizes_large_frame(mock_av, mock_cv2):
 
 
 @patch("video_decomposer_mcp.tools.frames.av")
+def test_extract_frame_at_no_time_base(mock_av):
+    mock_stream = MagicMock()
+    mock_stream.time_base = None
+
+    mock_container = MagicMock()
+    mock_container.streams.video = [mock_stream]
+    mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
+    mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
+
+    with pytest.raises(RuntimeError, match="Video stream has no time_base"):
+        _extract_frame_at("/fake/video.mp4", 5.0, 768, 75)
+
+
+@patch("video_decomposer_mcp.tools.frames.av")
 def test_extract_frame_at_no_frames(mock_av):
     mock_stream = MagicMock()
     mock_stream.time_base = 1 / 1000
@@ -109,11 +123,9 @@ async def test_do_extract_frame(mock_extract, store_with_video):
 
     result = await do_extract_frame(store, video_id, 5.0)
 
-    assert result["type"] == "image"
-    assert result["mimeType"] == "image/jpeg"
-    assert result["timestamp"] == 5.0
-    decoded = base64.b64decode(result["data"])
-    assert decoded == b"jpeg data"
+    assert isinstance(result, Image)
+    assert result.data == b"jpeg data"
+    assert result._format == "jpeg"
     mock_extract.assert_called_once()
 
 
@@ -128,10 +140,8 @@ async def test_do_extract_frame_cache_hit(mock_extract, store_with_video):
 
     result = await do_extract_frame(store, video_id, 5.0)
 
-    assert result["type"] == "image"
-    assert result["timestamp"] == 5.0
-    decoded = base64.b64decode(result["data"])
-    assert decoded == b"cached jpeg"
+    assert isinstance(result, Image)
+    assert result.data == b"cached jpeg"
     # Should not call _extract_frame_at since cache exists
     mock_extract.assert_not_called()
 

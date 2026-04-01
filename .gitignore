@@ -1,5 +1,6 @@
 # python stuff
 __pycache__/
+.*_cache/
 *.py[cod]
 *.egg-info/
 dist/

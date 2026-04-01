@@ -1,10 +1,10 @@
 import asyncio
-import base64
 import logging
 from functools import partial
 
 import av
 import cv2
+from mcp.server.fastmcp import Image
 
 from ..video_store import VideoStore
 
@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 def _extract_frame_at(video_path: str, timestamp: float, max_dimension: int, quality: int) -> bytes:
     with av.open(video_path) as container:
         stream = container.streams.video[0]
+        if stream.time_base is None:
+            raise RuntimeError("Video stream has no time_base")
         target_pts = int(timestamp / stream.time_base)
         container.seek(target_pts, stream=stream)
         frame = next(container.decode(stream))
@@ -35,7 +37,7 @@ async def do_extract_frame(
     *,
     max_dimension: int = 768,
     quality: int = 75,
-) -> dict:
+) -> Image:
     logger.info("Extracting frame video_id=%s timestamp=%.3f", video_id, timestamp)
     record = store.get(video_id)
     frames_dir = store.frames_dir(video_id)
@@ -60,10 +62,4 @@ async def do_extract_frame(
         )
         cache_path.write_bytes(data)
 
-    encoded = base64.b64encode(data).decode("utf-8")
-    return {
-        "type": "image",
-        "data": encoded,
-        "mimeType": "image/jpeg",
-        "timestamp": timestamp,
-    }
+    return Image(data=data, format="jpeg")

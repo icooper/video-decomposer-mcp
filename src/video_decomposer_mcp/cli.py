@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import logging
 from pathlib import Path
 
@@ -9,7 +8,7 @@ from . import configure_logging
 from .tools.analyze import do_analyze
 from .tools.download import do_download
 from .tools.frames import do_extract_frame
-from .tools.transcribe import do_transcribe, preload_model
+from .tools.transcribe import do_transcribe, preload_whisper_model
 from .video_store import VideoStore
 
 app = typer.Typer()
@@ -19,10 +18,10 @@ store = VideoStore(Path("./video_store"))
 
 
 @app.command()
-def preload(model: str = "turbo") -> None:
+def preload(whisper_model: str = "turbo") -> None:
     """Preload a Whisper model into the cache. Useful for warming up before handling requests."""
-    preload_model(model)
-    typer.echo(f"Model '{model}' preloaded into cache.")
+    preload_whisper_model(whisper_model)
+    typer.echo(f"Model '{whisper_model}' preloaded into cache.")
 
 
 @app.command()
@@ -33,9 +32,14 @@ def download(url: str) -> None:
 
 
 @app.command()
-def transcribe(video_id: str, model: str = "turbo") -> None:
+def transcribe(
+    video_id: str,
+    whisper_model: str = typer.Option("turbo", help="Whisper model size: turbo, base, small, medium, or large"),
+    diarize_speakers: bool = typer.Option(False, "--diarize-speakers/--no-diarize-speakers", help="Identify speakers"),
+    align_language: str = typer.Option("auto", help="Language code for alignment (e.g. en, fr) or auto to detect"),
+) -> None:
     """Transcribe a downloaded video."""
-    result = asyncio.run(do_transcribe(store, video_id, model))
+    result = asyncio.run(do_transcribe(store, video_id, whisper_model, diarize_speakers, align_language))
     typer.echo(result["text"])
 
 
@@ -50,22 +54,24 @@ def extract_frame(
     output_dir.mkdir(parents=True, exist_ok=True)
     filename = f"frame_{int(timestamp * 1000):08d}.jpg"
     path = output_dir / filename
-    path.write_bytes(base64.b64decode(result["data"]))
+    path.write_bytes(result.data)
     typer.echo(f"Saved frame at {timestamp}s to {path}")
 
 
 @app.command()
 def analyze(
     url: str,
-    whisper_model: str = "turbo",
+    whisper_model: str = typer.Option("turbo", help="Whisper model size: turbo, base, small, medium, or large"),
+    diarize_speakers: bool = typer.Option(False, "--diarize-speakers/--no-diarize-speakers", help="Identify speakers"),
+    align_language: str = typer.Option("auto", help="Language code for alignment (e.g. en, fr) or auto to detect"),
 ) -> None:
     """Download and transcribe a video in one step."""
-    result = asyncio.run(do_analyze(store, url, whisper_model))
+    result = asyncio.run(do_analyze(store, url, whisper_model, diarize_speakers, align_language))
     typer.echo(f"Video ID: {result['video_id']}")
     typer.echo(f"Transcript: {result['transcript']['text']}")
 
 
 def main():
-    configure_logging(logging.DEBUG)
+    configure_logging(logging.ERROR)  # can be overridden by LOG_LEVEL environment variable
     store.cleanup()
     app()

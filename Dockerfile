@@ -105,8 +105,15 @@ COPY src/ src/
 COPY README.md ./
 RUN uv sync
 
-# MCP server configuration variables
-ENV MCP_HOST=0.0.0.0
-ENV MCP_PORT=8000
+# Application configuration (defaults match .env.example)
+ENV MCP_HOST=0.0.0.0 \
+    MCP_PORT=8000 \
+    VIDEO_STORE_TTL_SECONDS=14400 \
+    VIDEO_STORE_CLEANUP_INTERVAL_SECONDS=600 \
+    WHISPER_MODEL=turbo \
+    ALIGN_LANGUAGE=en \
+    LOG_LEVEL=INFO \
+    HF_TOKEN= \
+    PYTHONWARNINGS="ignore::UserWarning:pyannote.audio.core.io"
 
 CMD ["uv", "run", "server"]
