@@ -5,6 +5,7 @@
         "charliermarsh.ruff",
         "redhat.vscode-yaml",
         "yzhang.markdown-all-in-one",
-        "anthropic.claude-code"
+        "anthropic.claude-code",
+        "esbenp.prettier-vscode"
     ]
 }
