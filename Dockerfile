@@ -67,7 +67,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.2 /uv /uvx /bin/
 
 # Install Python 3.12 via uv
 RUN uv python install 3.12
