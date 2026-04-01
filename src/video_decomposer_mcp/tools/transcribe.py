@@ -38,6 +38,6 @@ async def do_transcribe(store: VideoStore, video_id: str, model_name: str = "tur
     logger.info("Transcribing video_id=%s model=%s", video_id, model_name)
     record = store.get(video_id)
     loop = asyncio.get_running_loop()
-    text = await loop.run_in_executor(None, partial(_transcribe, str(record.file_path), model_name))
-    logger.debug("Transcription complete video_id=%s length=%d chars", video_id, len(text))
-    return text
+    result = await loop.run_in_executor(None, partial(_transcribe, str(record.file_path), model_name))
+    logger.debug("Transcription complete video_id=%s length=%d chars", video_id, len(result["text"]))
+    return result

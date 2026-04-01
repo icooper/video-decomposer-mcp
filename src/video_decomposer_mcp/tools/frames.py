@@ -12,12 +12,11 @@ logger = logging.getLogger(__name__)
 
 
 def _extract_frame_at(video_path: str, timestamp: float, max_dimension: int, quality: int) -> bytes:
-    container = av.open(video_path)
-    stream = container.streams.video[0]
-    target_pts = int(timestamp / stream.time_base)
-    container.seek(target_pts, stream=stream)
-    frame = next(container.decode(stream))
-    container.close()
+    with av.open(video_path) as container:
+        stream = container.streams.video[0]
+        target_pts = int(timestamp / stream.time_base)
+        container.seek(target_pts, stream=stream)
+        frame = next(container.decode(stream))
     img = frame.to_ndarray(format="bgr24")
     h, w = img.shape[:2]
     if max(h, w) > max_dimension:

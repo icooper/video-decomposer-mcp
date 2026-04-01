@@ -71,7 +71,7 @@ async def download_video(
     Supports YouTube, Facebook, Instagram, and most video hosting sites.
 
     Returns a video_id string. Pass this ID to transcribe_video or
-    extract_frames to process the video. Downloaded videos expire after
+    extract_frame to process the video. Downloaded videos expire after
     4 hours."""
     return await do_download(store, url)
 
@@ -95,7 +95,7 @@ async def transcribe_video(
 
     Returns a dict with "text" (the full transcript) and "segments" (a list
     of {start, end, text} objects with timestamps in seconds). Use the
-    segments to correlate speech with frames from extract_frames."""
+    segments to correlate speech with frames from extract_frame."""
     return await do_transcribe(store, video_id, model)
 
 

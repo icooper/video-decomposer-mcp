@@ -37,7 +37,7 @@ class VideoStore:
             if not video_dir.is_dir():
                 continue
             video_id = video_dir.name
-            video_files = list(video_dir.glob("*.mp4"))
+            video_files = [f for f in video_dir.iterdir() if f.is_file() and f.suffix != ".json"]
             if not video_files:
                 continue
             file_path = video_files[0]
@@ -74,11 +74,15 @@ class VideoStore:
         )
         self._videos[video_id] = record
         manifest_path = file_path.parent / "manifest.json"
-        manifest_path.write_text(json.dumps({
-            "url": url,
-            "video_id": video_id,
-            "downloaded_at": record.downloaded_at,
-        }))
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "url": url,
+                    "video_id": video_id,
+                    "downloaded_at": record.downloaded_at,
+                }
+            )
+        )
         logger.debug("Registered video video_id=%s path=%s", video_id, file_path)
         return record
 

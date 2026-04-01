@@ -22,7 +22,8 @@ def test_extract_frame_at(mock_av, mock_cv2):
     mock_container = MagicMock()
     mock_container.streams.video = [mock_stream]
     mock_container.decode.return_value = iter([mock_frame])
-    mock_av.open.return_value = mock_container
+    mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
+    mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
 
     mock_cv2.IMWRITE_JPEG_QUALITY = 1
     mock_cv2.imencode.return_value = (True, np.frombuffer(b"jpeg bytes", dtype=np.uint8))
@@ -32,7 +33,6 @@ def test_extract_frame_at(mock_av, mock_cv2):
     assert result == b"jpeg bytes"
     mock_av.open.assert_called_once_with("/fake/video.mp4")
     mock_container.seek.assert_called_once()
-    mock_container.close.assert_called_once()
     mock_frame.to_ndarray.assert_called_once_with(format="bgr24")
     # No resize needed since 640 < 768
     mock_cv2.resize.assert_not_called()
@@ -50,7 +50,8 @@ def test_extract_frame_at_resizes_large_frame(mock_av, mock_cv2):
     mock_container = MagicMock()
     mock_container.streams.video = [mock_stream]
     mock_container.decode.return_value = iter([mock_frame])
-    mock_av.open.return_value = mock_container
+    mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
+    mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
 
     resized = np.zeros((432, 768, 3), dtype=np.uint8)
     mock_cv2.resize.return_value = resized
@@ -72,7 +73,8 @@ def test_extract_frame_at_no_frames(mock_av):
     mock_container = MagicMock()
     mock_container.streams.video = [mock_stream]
     mock_container.decode.return_value = iter([])
-    mock_av.open.return_value = mock_container
+    mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
+    mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
 
     with pytest.raises(StopIteration):
         _extract_frame_at("/fake/video.mp4", 999.0, 768, 75)

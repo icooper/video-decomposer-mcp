@@ -181,15 +181,27 @@ def test_scan_existing_restores_videos(tmp_path: Path):
     assert record.file_path == f
 
 
-def test_scan_existing_skips_dirs_without_mp4(tmp_path: Path):
+def test_scan_existing_skips_dirs_without_video_files(tmp_path: Path):
     base = tmp_path / "v"
     base.mkdir(parents=True)
-    # Create a directory with no mp4 files
+    # Create a directory with only a JSON file (no video files)
     (base / "empty_dir").mkdir()
-    (base / "empty_dir" / "notes.txt").write_text("not a video")
+    (base / "empty_dir" / "manifest.json").write_text("{}")
 
     s = VideoStore(base_dir=base)
     assert len(s._videos) == 0
+
+
+def test_scan_existing_discovers_non_mp4_video(tmp_path: Path):
+    base = tmp_path / "v"
+    base.mkdir(parents=True)
+    vdir = base / "abc123456789"
+    vdir.mkdir()
+    (vdir / "video.webm").write_bytes(b"webm data")
+
+    s = VideoStore(base_dir=base)
+    record = s.get("abc123456789")
+    assert record.file_path.suffix == ".webm"
 
 
 def test_scan_existing_skips_files(tmp_path: Path):
