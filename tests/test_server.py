@@ -146,11 +146,14 @@ async def test_lifespan():
         created_tasks.append(task)
         return task
 
-    with patch("video_decomposer_mcp.server._cleanup_loop", new_callable=AsyncMock):
-        with patch("video_decomposer_mcp.server.asyncio.create_task", side_effect=capture_create_task) as mock_create:
-            async with lifespan(mcp):
-                mock_create.assert_called_once()
-                assert len(created_tasks) == 1
-                assert not created_tasks[0].cancelled()
-            # After exiting lifespan, the task should be cancelled
-            assert created_tasks[0].cancelled()
+    with patch("video_decomposer_mcp.server.preload_model"):
+        with patch("video_decomposer_mcp.server._cleanup_loop", new_callable=AsyncMock):
+            with patch(
+                "video_decomposer_mcp.server.asyncio.create_task", side_effect=capture_create_task
+            ) as mock_create:
+                async with lifespan(mcp):
+                    mock_create.assert_called_once()
+                    assert len(created_tasks) == 1
+                    assert not created_tasks[0].cancelled()
+                # After exiting lifespan, the task should be cancelled
+                assert created_tasks[0].cancelled()

@@ -12,7 +12,7 @@ from . import configure_logging
 from .tools.analyze import do_analyze
 from .tools.download import do_download
 from .tools.frames import do_extract_frame
-from .tools.transcribe import do_transcribe
+from .tools.transcribe import do_transcribe, preload_model
 from .video_store import VideoStore
 
 logger = logging.getLogger(__name__)
@@ -24,10 +24,19 @@ WHISPER_MODEL_DESCRIPTION = (
 
 @asynccontextmanager
 async def lifespan(app):
+
+    # preload the default model ("turbo") on startup to reduce the first-request latency
+    preload_model("turbo")
+    logger.info("Whisper 'turbo' model preloaded")
+
+    # start the cleanup loop to remove expired videos from the store every 10 minutes
     task = asyncio.create_task(_cleanup_loop())
+
     try:
         yield
+
     finally:
+        # stop the cleanup loop on shutdown
         task.cancel()
         try:
             await task
