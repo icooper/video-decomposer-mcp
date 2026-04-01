@@ -24,13 +24,11 @@ jobs:
             base_runtime: nvidia/cuda:12.8.1-runtime-ubuntu22.04
             torch_index: https://download.pytorch.org/whl/cu128
             ffmpeg_cuda: "1"
-            latest: true
           - variant: cpu
             base_build: ubuntu:22.04
             base_runtime: ubuntu:22.04
             torch_index: https://download.pytorch.org/whl/cpu
             ffmpeg_cuda: "0"
-            latest: false
     steps:
       - uses: actions/checkout@v6
         with:
@@ -57,7 +55,6 @@ jobs:
             type=semver,pattern={{version}},value=${{ steps.ref.outputs.version }},suffix=-${{ matrix.variant }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.ref.outputs.version }},suffix=-${{ matrix.variant }}
             type=sha,suffix=-${{ matrix.variant }}
-            ${{ matrix.latest && 'type=raw,value=latest' || '' }}
 
       - uses: docker/build-push-action@v7
         with:
