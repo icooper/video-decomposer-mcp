@@ -54,8 +54,8 @@ jobs:
         with:
           images: ghcr.io/icooper/video-decomposer-mcp
           tags: |
-            type=semver,pattern={{version}},value=v${{ steps.ref.outputs.version }},suffix=-${{ matrix.variant }}
-            type=semver,pattern={{major}}.{{minor}},value=v${{ steps.ref.outputs.version }},suffix=-${{ matrix.variant }}
+            type=semver,pattern={{version}},value=${{ steps.ref.outputs.version }},suffix=-${{ matrix.variant }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.ref.outputs.version }},suffix=-${{ matrix.variant }}
             type=sha,suffix=-${{ matrix.variant }}
             ${{ matrix.latest && 'type=raw,value=latest' || '' }}
 
