@@ -174,7 +174,7 @@ docker run --gpus all -p 8000:8000 \
   -v ./whisper_cache:/root/.cache/whisper \
   -v ./video_store:/app/video_store \
   -e VIDEO_STORE_PATH=/app/video_store \
-  ghcr.io/icooper/video-decomposer-mcp:1.0-cu128
+  ghcr.io/icooper/video-decomposer-mcp:1.0.0-cu128
 ```
 
 **CPU-only:**
@@ -184,10 +184,11 @@ docker run -p 8000:8000 \
   -v ./whisper_cache:/root/.cache/whisper \
   -v ./video_store:/app/video_store \
   -e VIDEO_STORE_PATH=/app/video_store \
-  ghcr.io/icooper/video-decomposer-mcp:1.0-cpu
+  ghcr.io/icooper/video-decomposer-mcp:1.0.0-cpu
 ```
 
-Don't use the `latest` tag, always use a version like `1.0` (or like `1.0.0`) with a variant suffix (`-cu128` or `-cpu`). See [video-decomposer-mcp packages](https://github.com/icooper/video-decomposer-mcp/pkgs/container/video-decomposer-mcp) for available versions.
+> [!NOTE]
+> Don't use the `latest` tag, always use a version like `1.0.0` (or just `1.0`) with a variant suffix (`-cu128` or `-cpu`). See [video-decomposer-mcp packages](https://github.com/icooper/video-decomposer-mcp/pkgs/container/video-decomposer-mcp) for available versions.
 
 ### Connecting with mcp-remote
 
