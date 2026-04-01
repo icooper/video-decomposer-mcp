@@ -57,7 +57,7 @@ RUN CUDA_FLAGS="" && \
 ARG BASE_RUNTIME
 FROM ${BASE_RUNTIME}
 
-LABEL org.opencontainers.image.description "MCP server for video decomposition: download, transcribe, and extract key frames"
+LABEL org.opencontainers.image.description="MCP server for video decomposition: download, transcribe, and extract key frames"
 
 # Copy FFmpeg from builder
 COPY --from=ffmpeg-builder /usr/local/bin/ff* /usr/local/bin/
