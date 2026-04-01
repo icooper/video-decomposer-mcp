@@ -1,0 +1,18 @@
+# python stuff
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+*.egg
+.env
+.coverage
+*.local.*
+
+# for CLI testing
+frames
+
+# for docker compose
+video_store
+whisper_cache

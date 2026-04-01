@@ -1,0 +1,75 @@
+[project]
+name = "video-decomposer-mcp"
+version = "0.1.0"
+description = "MCP server for video decomposition: download, transcribe, and extract key frames"
+readme = "README.md"
+authors = [
+    { name = "Ian Cooper", email = "icooper@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "mcp[cli]>=1.26.0",
+    "yt-dlp",
+    "openai-whisper",
+    "scenedetect",
+    "av>=17",
+    "opencv-python-headless",
+    "typer",
+]
+
+[project.scripts]
+server = "video_decomposer_mcp.server:main"
+cli = "video_decomposer_mcp.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.2,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "--cov=video_decomposer_mcp --cov-report=term-missing --cov-fail-under=100"
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+build_command = ""
+commit_message = "chore(release): {version}"
+
+[tool.uv]
+index = [
+    { name = "pytorch-cu124", url = "https://download.pytorch.org/whl/cu124", explicit = true },
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }
+
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes errors
+    "I",   # import-related issues
+    "PLR", # pydantic-lint issues
+    "S",   # security issues
+]
+# allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.per-file-ignores]
+"test_*.py" = [
+    "S101",    # Asserts belong in tests
+    "ARG",     # Unused args might be needed for fixtures
+    "PLR2004", # Magic value used in comparison
+]
