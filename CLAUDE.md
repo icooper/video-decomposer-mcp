@@ -26,7 +26,7 @@ docker compose up --build  # Run in Docker with GPU passthrough
 
 ## Release Notes
 
-When making user-facing changes (new features, API changes, bug fixes, breaking changes), add a short description to `RELEASE_NOTES.md` at the root of the repo. Create the file if it doesn't exist. Keep entries concise — one bullet per change.
+When making user-facing changes (new features, API changes, bug fixes), add a short description to `RELEASE_NOTES.md` at the root of the repo. Create the file if it doesn't exist. Don't create or add any headers. Do keep entries concise — one bullet per change.
 
 ## Key Patterns
 

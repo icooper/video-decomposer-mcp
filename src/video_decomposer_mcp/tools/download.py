@@ -20,7 +20,7 @@ def _download(video_dir: Path, url: str) -> Path:
         "quiet": True,
         "no_warnings": True,
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info)
         # After merge, extension may differ from original

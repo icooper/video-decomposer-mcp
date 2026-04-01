@@ -66,6 +66,20 @@ def test_extract_frame_at_resizes_large_frame(mock_av, mock_cv2):
 
 
 @patch("video_decomposer_mcp.tools.frames.av")
+def test_extract_frame_at_no_time_base(mock_av):
+    mock_stream = MagicMock()
+    mock_stream.time_base = None
+
+    mock_container = MagicMock()
+    mock_container.streams.video = [mock_stream]
+    mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
+    mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
+
+    with pytest.raises(RuntimeError, match="Video stream has no time_base"):
+        _extract_frame_at("/fake/video.mp4", 5.0, 768, 75)
+
+
+@patch("video_decomposer_mcp.tools.frames.av")
 def test_extract_frame_at_no_frames(mock_av):
     mock_stream = MagicMock()
     mock_stream.time_base = 1 / 1000

@@ -146,7 +146,7 @@ async def test_lifespan():
         created_tasks.append(task)
         return task
 
-    with patch("video_decomposer_mcp.server.preload_model"):
+    with patch("video_decomposer_mcp.server.preload_whisper_model"):
         with patch("video_decomposer_mcp.server._cleanup_loop", new_callable=AsyncMock):
             with patch(
                 "video_decomposer_mcp.server.asyncio.create_task", side_effect=capture_create_task

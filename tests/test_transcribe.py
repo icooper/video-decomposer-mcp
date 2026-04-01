@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from video_decomposer_mcp.tools.transcribe import _model_cache, _transcribe, do_transcribe, preload_model
+from video_decomposer_mcp.tools.transcribe import _model_cache, _transcribe, do_transcribe, preload_whisper_model
 
 
 @pytest.fixture(autouse=True)
@@ -66,12 +66,12 @@ def test_model_caching(mock_torch, mock_whisper):
 
 @patch("video_decomposer_mcp.tools.transcribe.whisper")
 @patch("video_decomposer_mcp.tools.transcribe.torch")
-def test_preload_model(mock_torch, mock_whisper):
+def test_preload_whisper_model(mock_torch, mock_whisper):
     mock_torch.cuda.is_available.return_value = False
     mock_model = MagicMock()
     mock_whisper.load_model.return_value = mock_model
 
-    preload_model("base")
+    preload_whisper_model("base")
 
     mock_whisper.load_model.assert_called_once_with("base", device="cpu")
     assert "base" in _model_cache

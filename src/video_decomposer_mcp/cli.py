@@ -9,7 +9,7 @@ from . import configure_logging
 from .tools.analyze import do_analyze
 from .tools.download import do_download
 from .tools.frames import do_extract_frame
-from .tools.transcribe import do_transcribe, preload_model
+from .tools.transcribe import do_transcribe, preload_whisper_model
 from .video_store import VideoStore
 
 app = typer.Typer()
@@ -19,10 +19,10 @@ store = VideoStore(Path("./video_store"))
 
 
 @app.command()
-def preload(model: str = "turbo") -> None:
+def preload(whisper_model: str = "turbo") -> None:
     """Preload a Whisper model into the cache. Useful for warming up before handling requests."""
-    preload_model(model)
-    typer.echo(f"Model '{model}' preloaded into cache.")
+    preload_whisper_model(whisper_model)
+    typer.echo(f"Model '{whisper_model}' preloaded into cache.")
 
 
 @app.command()
@@ -33,9 +33,9 @@ def download(url: str) -> None:
 
 
 @app.command()
-def transcribe(video_id: str, model: str = "turbo") -> None:
+def transcribe(video_id: str, whisper_model: str = "turbo") -> None:
     """Transcribe a downloaded video."""
-    result = asyncio.run(do_transcribe(store, video_id, model))
+    result = asyncio.run(do_transcribe(store, video_id, whisper_model))
     typer.echo(result["text"])
 
 

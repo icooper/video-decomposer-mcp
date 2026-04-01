@@ -20,7 +20,7 @@ def test_download(mock_download):
 @patch("video_decomposer_mcp.cli.do_transcribe", new_callable=AsyncMock)
 def test_transcribe(mock_transcribe):
     mock_transcribe.return_value = {"text": "Hello world transcript", "segments": []}
-    result = runner.invoke(app, ["transcribe", "vid123", "--model", "base"])
+    result = runner.invoke(app, ["transcribe", "vid123", "--whisper-model", "base"])
     assert result.exit_code == 0
     assert "Hello world transcript" in result.output
 
@@ -66,9 +66,9 @@ def test_analyze_custom_model(mock_analyze):
     assert call_args[0][2] == "large"
 
 
-@patch("video_decomposer_mcp.cli.preload_model")
+@patch("video_decomposer_mcp.cli.preload_whisper_model")
 def test_preload(mock_preload):
-    result = runner.invoke(app, ["preload", "--model", "base"])
+    result = runner.invoke(app, ["preload", "--whisper-model", "base"])
     assert result.exit_code == 0
     assert "base" in result.output
     mock_preload.assert_called_once_with("base")

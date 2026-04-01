@@ -12,7 +12,7 @@ from . import configure_logging
 from .tools.analyze import do_analyze
 from .tools.download import do_download
 from .tools.frames import do_extract_frame
-from .tools.transcribe import do_transcribe, preload_model
+from .tools.transcribe import do_transcribe, preload_whisper_model
 from .video_store import VideoStore
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ WHISPER_MODEL_DESCRIPTION = (
 async def lifespan(app):
 
     # preload the default model ("turbo") on startup to reduce the first-request latency
-    preload_model("turbo")
+    preload_whisper_model("turbo")
     logger.info("Whisper 'turbo' model preloaded")
 
     # start the cleanup loop to remove expired videos from the store every 10 minutes
@@ -88,7 +88,7 @@ async def download_video(
 @mcp.tool()
 async def transcribe_video(
     video_id: Annotated[str, Field(description="ID returned by download_video or analyze_video")],
-    model: Annotated[
+    whisper_model: Annotated[
         str,
         Field(description=WHISPER_MODEL_DESCRIPTION),
     ] = "turbo",
@@ -105,7 +105,7 @@ async def transcribe_video(
     Returns a dict with "text" (the full transcript) and "segments" (a list
     of {start, end, text} objects with timestamps in seconds). Use the
     segments to correlate speech with frames from extract_frame."""
-    return await do_transcribe(store, video_id, model)
+    return await do_transcribe(store, video_id, whisper_model)
 
 
 @mcp.tool()

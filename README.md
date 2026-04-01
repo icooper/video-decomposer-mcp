@@ -66,7 +66,7 @@ The server exposes four tools over the MCP protocol:
 | Tool               | Parameters                                            | Returns                             | Description                                                                 |
 | ------------------ | ----------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------- |
 | `download_video`   | `url`                                                 | `video_id` (string)                 | Download a video. Returns an ID for use with other tools.                   |
-| `transcribe_video` | `video_id`, `model?`                                  | `{text, segments}`                  | Transcribe audio to text. Segments include start/end timestamps in seconds. |
+| `transcribe_video` | `video_id`, `whisper_model?`                          | `{text, segments}`                  | Transcribe audio to text. Segments include start/end timestamps in seconds. |
 | `extract_frame`    | `video_id`, `timestamp`, `max_dimension?`, `quality?` | `{type, data, mimeType, timestamp}` | Extract a single frame as a base64-encoded JPEG.                            |
 | `analyze_video`    | `url`, `whisper_model?`                               | `{video_id, transcript}`            | Download + transcribe in one call. Best starting point for video analysis.  |
 
@@ -95,7 +95,7 @@ uv run cli analyze "<url>"
 
 ## Whisper Models
 
-The `model` / `whisper_model` parameter controls the specific Whisper model used for transcription:
+The `whisper_model` parameter controls the specific Whisper model used for transcription:
 
 | Model    | Parameters | Relative Speed | VRAM Required | Notes                                 |
 | -------- | ---------- | -------------- | ------------- | ------------------------------------- |

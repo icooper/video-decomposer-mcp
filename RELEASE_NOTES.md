@@ -1,0 +1,1 @@
+- Renamed the `model` parameter to `whisper_model` on `transcribe_video` (MCP tool) and `transcribe`/`preload` (CLI commands) for consistency with `analyze_video`. The CLI flag is now `--whisper-model` everywhere.
