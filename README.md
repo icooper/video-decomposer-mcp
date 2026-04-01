@@ -1,6 +1,21 @@
-# Video Decomposer
+# Video Decomposer <!-- omit in toc -->
 
 An MCP server for video decomposition: download videos, transcribe audio with OpenAI Whisper (CUDA-accelerated), and extract key frames. Runs as an HTTP MCP server on a machine with an NVIDIA GPU, and includes a CLI for local use.
+
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [MCP Tools](#mcp-tools)
+- [CLI Usage](#cli-usage)
+- [Whisper Models](#whisper-models)
+- [Architecture](#architecture)
+- [Docker and mcp-remote](#docker-and-mcp-remote)
+  - [Running the server with Docker Compose](#running-the-server-with-docker-compose)
+  - [Connecting with mcp-remote](#connecting-with-mcp-remote)
+  - [Claude Desktop configuration](#claude-desktop-configuration)
+- [Local Development](#local-development)
+- [Configuration](#configuration)
+- [License](#license)
 
 ## Features
 
@@ -131,11 +146,16 @@ docker compose up --build
 
 This builds a multi-stage Docker image that includes:
 
-- NVIDIA CUDA 12.4 runtime
+- NVIDIA CUDA 12.8 runtime
 - FFmpeg 8.0.1 compiled with NVDEC/NVENC support
-- All Python dependencies with PyTorch CUDA 12.4 wheels
+- All Python dependencies with PyTorch CUDA 12.8 wheels
 
 The server listens on port 8000. Whisper models are cached in `./whisper_cache` and downloaded videos are stored in `./video_store`, both persisted across container restarts.
+
+> [!NOTE]
+> **GPU compatibility:** The default configuration uses CUDA 12.8 PyTorch wheels, which support NVIDIA GPUs from Maxwell (sm_50) through Blackwell (sm_120). If you have an older or newer GPU architecture that isn't supported, update the `pytorch-cu128` index URL in `pyproject.toml` to the appropriate version from [PyTorch's install page](https://pytorch.org/get-started/locally/), update the CUDA base images in the `Dockerfile` to match, and run `uv lock` to re-resolve dependencies.
+>
+> **CPU-only:** To run without a GPU, change the `torch` override in `pyproject.toml` to `pytorch-cpu` from `https://download.pytorch.org/whl/cpu`; then run `uv lock`. Transcription will be significantly slower but fully functional.
 
 ### Connecting with mcp-remote
 
@@ -177,7 +197,7 @@ uv run pytest
 uv run server
 ```
 
-Python 3.12 is required. PyTorch is installed from the CUDA 12.4 index configured in `pyproject.toml`.
+Python 3.12 is required. PyTorch is installed from the CUDA 12.8 index configured in `pyproject.toml`.
 
 ## Configuration
 
