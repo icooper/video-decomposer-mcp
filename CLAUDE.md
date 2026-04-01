@@ -24,6 +24,10 @@ docker compose up --build  # Run in Docker with GPU passthrough
 - **`tools/frames.py`** — PyAV + OpenCV frame extraction at specific timestamps, returns base64-encoded JPEG image dicts with caching. Runs in `run_in_executor`.
 - **`tools/analyze.py`** — Orchestrates download → transcribe.
 
+## Release Notes
+
+When making user-facing changes (new features, API changes, bug fixes, breaking changes), add a short description to `RELEASE_NOTES.md` at the root of the repo. Create the file if it doesn't exist. Keep entries concise — one bullet per change.
+
 ## Key Patterns
 
 - All blocking operations (yt-dlp, whisper, av/opencv) run via `asyncio.get_running_loop().run_in_executor()` to avoid blocking the async event loop.
