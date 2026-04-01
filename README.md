@@ -47,12 +47,12 @@ uv run cli analyze https://www.youtube.com/watch?v=dQw4w9WgXcQ
 
 The server exposes four tools over the MCP protocol:
 
-| Tool | Parameters | Returns | Description |
-|------|-----------|---------|-------------|
-| `download_video` | `url` | `video_id` (string) | Download a video. Returns an ID for use with other tools. |
-| `transcribe_video` | `video_id`, `model?` | `{text, segments}` | Transcribe audio to text. Segments include start/end timestamps in seconds. |
-| `extract_frame` | `video_id`, `timestamp`, `max_dimension?`, `quality?` | `{type, data, mimeType, timestamp}` | Extract a single frame as a base64-encoded JPEG. |
-| `analyze_video` | `url`, `whisper_model?` | `{video_id, transcript}` | Download + transcribe in one call. Best starting point for video analysis. |
+| Tool               | Parameters                                            | Returns                             | Description                                                                 |
+| ------------------ | ----------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------- |
+| `download_video`   | `url`                                                 | `video_id` (string)                 | Download a video. Returns an ID for use with other tools.                   |
+| `transcribe_video` | `video_id`, `model?`                                  | `{text, segments}`                  | Transcribe audio to text. Segments include start/end timestamps in seconds. |
+| `extract_frame`    | `video_id`, `timestamp`, `max_dimension?`, `quality?` | `{type, data, mimeType, timestamp}` | Extract a single frame as a base64-encoded JPEG.                            |
+| `analyze_video`    | `url`, `whisper_model?`                               | `{video_id, transcript}`            | Download + transcribe in one call. Best starting point for video analysis.  |
 
 **`analyze_video`** is the recommended entry point -- it downloads the video and returns a transcript with timestamped segments. Use the returned `video_id` and segment timestamps with `extract_frame` to see what was on screen at specific moments.
 
@@ -65,7 +65,7 @@ The CLI provides the same capabilities as the MCP server for local use:
 uv run cli preload turbo
 
 # Download a video and get its ID
-uv run cli download "https://www.youtube.com/watch?v=VIDEO_ID"
+uv run cli download "<url>"
 
 # Transcribe a downloaded video
 uv run cli transcribe abc123def456
@@ -74,26 +74,26 @@ uv run cli transcribe abc123def456
 uv run cli extract-frame abc123def456 30.5 --output-dir ./frames
 
 # Download and transcribe in one step
-uv run cli analyze "https://www.youtube.com/watch?v=VIDEO_ID"
+uv run cli analyze "<url>"
 ```
 
 ## Whisper Models
 
-The `model` / `whisper_model` parameter controls the size of the Whisper model used for transcription:
+The `model` / `whisper_model` parameter controls the specific Whisper model used for transcription:
 
-| Model | Parameters | Relative Speed | VRAM Required | Notes |
-|-------|-----------|----------------|---------------|-------|
-| `turbo` | 809M | ~8x | ~6 GB | Default. Best speed/quality tradeoff. |
-| `base` | 74M | ~16x | ~1 GB | Fast, lower accuracy. |
-| `small` | 244M | ~6x | ~2 GB | Moderate quality. |
-| `medium` | 769M | ~2x | ~5 GB | Good quality, slower. |
-| `large` | 1550M | 1x | ~10 GB | Best quality, slowest. |
+| Model    | Parameters | Relative Speed | VRAM Required | Notes                                 |
+| -------- | ---------- | -------------- | ------------- | ------------------------------------- |
+| `turbo`  | 809M       | ~8x            | ~6 GB         | Default. Best speed/quality tradeoff. |
+| `base`   | 74M        | ~16x           | ~1 GB         | Fast, lower accuracy.                 |
+| `small`  | 244M       | ~6x            | ~2 GB         | Moderate quality.                     |
+| `medium` | 769M       | ~2x            | ~5 GB         | Good quality, slower.                 |
+| `large`  | 1550M      | 1x             | ~10 GB        | Best quality, slowest.                |
 
-Whisper supports 99 languages. English has the best accuracy; for non-English audio, `large` may produce better results.
+Whisper supports many languages, but English has the best accuracy; for non-English audio, `large` may produce better results.
 
 ## Architecture
 
-The server is built with [FastMCP](https://github.com/modelcontextprotocol/python-sdk) and delegates to tool modules that wrap yt-dlp, OpenAI Whisper, and PyAV/OpenCV. All blocking operations (downloading, transcription, frame extraction) run via `asyncio.run_in_executor()` to keep the async event loop responsive.
+The server is built with [FastMCP](https://github.com/modelcontextprotocol/python-sdk) and delegates to tool modules that wrap [yt-dlp](https://github.com/yt-dlp/yt-dlp), [OpenAI Whisper](https://github.com/openai/whisper), [PyAV](https://github.com/pyav-org/pyav), and [OpenCV](https://opencv.org/). All blocking operations (downloading, transcription, frame extraction) run via `asyncio.run_in_executor()` to keep the async event loop responsive.
 
 A `VideoStore` manages downloaded videos on disk, keyed by short hex IDs. Videos expire after 4 hours, and a background cleanup loop runs every 10 minutes.
 
@@ -162,7 +162,7 @@ Add this to your `claude_desktop_config.json` to make Video Decomposer available
 }
 ```
 
-This works with any MCP client that supports stdio servers -- Claude Desktop, Claude Code, and others.
+This works with any MCP client that supports stdio servers.
 
 ## Local Development
 
@@ -181,13 +181,13 @@ Python 3.12 is required. PyTorch is installed from the CUDA 12.4 index configure
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VIDEO_STORE_PATH` | `./video_store` | Directory for downloaded video files |
-| `LOG_LEVEL` | `INFO` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
+| Variable           | Default         | Description                                                         |
+| ------------------ | --------------- | ------------------------------------------------------------------- |
+| `VIDEO_STORE_PATH` | `./video_store` | Directory for downloaded video files                                |
+| `LOG_LEVEL`        | `INFO`          | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
 
 Downloaded videos are automatically cleaned up after 4 hours.
 
 ## License
 
-MIT -- see [LICENSE.md](LICENSE.md).
+See [LICENSE.md](LICENSE.md).
