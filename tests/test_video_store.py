@@ -2,6 +2,7 @@ import json
 import shutil
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -13,6 +14,33 @@ def test_create_entry(store: VideoStore):
     assert len(video_id) == 12
     assert video_dir.exists()
     assert video_dir.parent == store.base_dir
+
+
+def test_create_entry_retries_on_collision(store: VideoStore):
+    # Pre-create a directory to cause a collision on the first attempt
+    first_id = "aaaaaaaaaaaa"
+    (store.base_dir / first_id).mkdir()
+
+    with patch("video_decomposer_mcp.video_store.uuid.uuid4") as mock_uuid:
+        mock_uuid_obj_1 = type("MockUUID", (), {"hex": first_id + "0000000000000000000000000000"})()
+        mock_uuid_obj_2 = type("MockUUID", (), {"hex": "bbbbbbbbbbbb0000000000000000000000000000"})()
+        mock_uuid.side_effect = [mock_uuid_obj_1, mock_uuid_obj_2]
+
+        video_id, video_dir = store.create_entry("https://example.com/v")
+        assert video_id == "bbbbbbbbbbbb"
+        assert video_dir.exists()
+
+
+def test_create_entry_fails_after_max_retries(store: VideoStore):
+    colliding_id = "cccccccccccc"
+    (store.base_dir / colliding_id).mkdir()
+
+    with patch("video_decomposer_mcp.video_store.uuid.uuid4") as mock_uuid:
+        mock_uuid_obj = type("MockUUID", (), {"hex": colliding_id + "0000000000000000000000000000"})()
+        mock_uuid.return_value = mock_uuid_obj
+
+        with pytest.raises(RuntimeError, match="Failed to generate unique video ID"):
+            store.create_entry("https://example.com/v")
 
 
 def test_register_and_get(store: VideoStore):

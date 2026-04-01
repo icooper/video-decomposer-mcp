@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 from functools import partial
 
 import torch
@@ -10,16 +11,18 @@ from ..video_store import VideoStore
 logger = logging.getLogger(__name__)
 
 _model_cache: dict[str, whisper.Whisper] = {}
+_model_lock = threading.Lock()
 
 
 def _get_model(model_name: str) -> whisper.Whisper:
-    if model_name not in _model_cache:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        logger.info("Loading Whisper model '%s' on %s", model_name, device)
-        _model_cache[model_name] = whisper.load_model(model_name, device=device)
-    else:
-        logger.debug("Using cached Whisper model '%s'", model_name)
-    return _model_cache[model_name]
+    with _model_lock:
+        if model_name not in _model_cache:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info("Loading Whisper model '%s' on %s", model_name, device)
+            _model_cache[model_name] = whisper.load_model(model_name, device=device)
+        else:
+            logger.debug("Using cached Whisper model '%s'", model_name)
+        return _model_cache[model_name]
 
 
 def preload_model(model_name: str) -> None:

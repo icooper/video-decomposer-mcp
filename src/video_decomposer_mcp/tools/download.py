@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import shutil
 from functools import partial
 from pathlib import Path
 
@@ -8,6 +9,8 @@ import yt_dlp
 from ..video_store import VideoStore
 
 logger = logging.getLogger(__name__)
+
+_url_locks: dict[str, asyncio.Lock] = {}
 
 
 def _download(video_dir: Path, url: str) -> Path:
@@ -30,14 +33,21 @@ def _download(video_dir: Path, url: str) -> Path:
 
 
 async def do_download(store: VideoStore, url: str) -> str:
-    existing = store.find_by_url(url)
-    if existing is not None:
-        logger.info("Video already downloaded video_id=%s url=%s", existing.video_id, url)
-        return existing.video_id
-    logger.info("Downloading video url=%s", url)
-    video_id, video_dir = store.create_entry(url)
-    loop = asyncio.get_running_loop()
-    file_path = await loop.run_in_executor(None, partial(_download, video_dir, url))
-    store.register(video_id, url, file_path)
-    logger.info("Download complete video_id=%s path=%s", video_id, file_path)
-    return video_id
+    if url not in _url_locks:
+        _url_locks[url] = asyncio.Lock()
+    async with _url_locks[url]:
+        existing = store.find_by_url(url)
+        if existing is not None:
+            logger.info("Video already downloaded video_id=%s url=%s", existing.video_id, url)
+            return existing.video_id
+        logger.info("Downloading video url=%s", url)
+        video_id, video_dir = store.create_entry(url)
+        loop = asyncio.get_running_loop()
+        try:
+            file_path = await loop.run_in_executor(None, partial(_download, video_dir, url))
+            store.register(video_id, url, file_path)
+        except Exception:
+            shutil.rmtree(video_dir, ignore_errors=True)
+            raise
+        logger.info("Download complete video_id=%s path=%s", video_id, file_path)
+        return video_id

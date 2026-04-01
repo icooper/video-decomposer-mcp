@@ -28,6 +28,7 @@ class VideoStore:
             self.base_dir = Path(tempfile.mkdtemp(prefix="video-decomposer-"))
         self.ttl_seconds = ttl_seconds
         self._videos: dict[str, VideoRecord] = {}
+        self._lock = asyncio.Lock()
         self._scan_existing()
         logger.debug("Initialized store at %s", self.base_dir)
 
@@ -59,11 +60,17 @@ class VideoStore:
             )
 
     def create_entry(self, url: str) -> tuple[str, Path]:
-        video_id = uuid.uuid4().hex[:12]
-        video_dir = self.base_dir / video_id
-        video_dir.mkdir()
-        logger.debug("Created entry video_id=%s", video_id)
-        return video_id, video_dir
+        for _ in range(3):
+            video_id = uuid.uuid4().hex[:12]
+            video_dir = self.base_dir / video_id
+            try:
+                video_dir.mkdir()
+            except FileExistsError:
+                logger.warning("ID collision video_id=%s, retrying", video_id)
+                continue
+            logger.debug("Created entry video_id=%s", video_id)
+            return video_id, video_dir
+        raise RuntimeError("Failed to generate unique video ID after 3 attempts")
 
     def register(self, video_id: str, url: str, file_path: Path) -> VideoRecord:
         record = VideoRecord(
@@ -129,12 +136,9 @@ class VideoStore:
 
     async def async_cleanup(self) -> int:
         loop = asyncio.get_running_loop()
-        now = time.time()
-        expired_ids = [vid for vid, rec in self._videos.items() if (now - rec.downloaded_at) >= self.ttl_seconds]
+        async with self._lock:
+            now = time.time()
+            expired_ids = [vid for vid, rec in self._videos.items() if (now - rec.downloaded_at) >= self.ttl_seconds]
         for vid in expired_ids:
-            record = self._videos.pop(vid)
-            video_dir = record.file_path.parent
-            if video_dir.exists():
-                await loop.run_in_executor(None, shutil.rmtree, video_dir)
-            logger.info("Evicted expired video video_id=%s", vid)
+            await loop.run_in_executor(None, self._evict, vid)
         return len(expired_ids)

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from video_decomposer_mcp.tools.download import _download, do_download
+from video_decomposer_mcp.tools.download import _download, _url_locks, do_download
 
 
 @pytest.fixture
@@ -90,3 +90,47 @@ async def test_do_download_dedup_skips_redownload(store_with_video):
     store, video_id, _ = store_with_video
     result = await do_download(store, "https://example.com/video")
     assert result == video_id
+
+
+async def test_do_download_cleans_up_on_failure(mock_ydl):
+    _mock_cls, ydl_instance = mock_ydl
+    ydl_instance.extract_info.side_effect = RuntimeError("network error")
+
+    from video_decomposer_mcp.video_store import VideoStore
+
+    store = VideoStore()
+    with pytest.raises(RuntimeError, match="network error"):
+        await do_download(store, "https://example.com/fail")
+
+    # The orphaned video_dir should have been cleaned up
+    dirs = [d for d in store.base_dir.iterdir() if d.is_dir()]
+    assert len(dirs) == 0
+
+
+async def test_do_download_creates_url_lock(store_with_video, mock_ydl):
+    _store, _video_id, _ = store_with_video
+    url = "https://example.com/lock-test"
+    _url_locks.pop(url, None)
+
+    from video_decomposer_mcp.video_store import VideoStore
+
+    store = VideoStore()
+    _mock_cls, ydl_instance = mock_ydl
+
+    def fake_extract(url, download=True):
+        dirs = [d for d in store.base_dir.iterdir() if d.is_dir()]
+        newest = max(dirs, key=lambda d: d.stat().st_ctime)
+        (newest / "test_id.mp4").touch()
+        return {"id": "test_id", "ext": "mp4"}
+
+    ydl_instance.extract_info.side_effect = fake_extract
+
+    def fake_prepare(info):
+        dirs = [d for d in store.base_dir.iterdir() if d.is_dir()]
+        newest = max(dirs, key=lambda d: d.stat().st_ctime)
+        return str(newest / f"{info['id']}.{info['ext']}")
+
+    ydl_instance.prepare_filename.side_effect = fake_prepare
+
+    await do_download(store, url)
+    assert url in _url_locks
