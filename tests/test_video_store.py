@@ -1,3 +1,4 @@
+import json
 import shutil
 import time
 from pathlib import Path
@@ -199,3 +200,81 @@ def test_scan_existing_skips_files(tmp_path: Path):
 
     s = VideoStore(base_dir=base)
     assert len(s._videos) == 0
+
+
+def test_register_writes_manifest(store: VideoStore):
+    video_id, video_dir = store.create_entry("https://example.com/v")
+    file_path = video_dir / "video.mp4"
+    file_path.touch()
+    store.register(video_id, "https://example.com/v", file_path)
+
+    manifest_path = video_dir / "manifest.json"
+    assert manifest_path.exists()
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["url"] == "https://example.com/v"
+    assert manifest["video_id"] == video_id
+    assert manifest["downloaded_at"] > 0
+
+
+def test_scan_existing_restores_url_from_manifest(tmp_path: Path):
+    base = tmp_path / "v"
+    s1 = VideoStore(base_dir=base)
+    vid, vdir = s1.create_entry("https://example.com/v")
+    f = vdir / "v.mp4"
+    f.write_bytes(b"data")
+    s1.register(vid, "https://example.com/v", f)
+
+    s2 = VideoStore(base_dir=base)
+    record = s2.get(vid)
+    assert record.url == "https://example.com/v"
+
+
+def test_scan_existing_handles_missing_manifest(tmp_path: Path):
+    base = tmp_path / "v"
+    base.mkdir(parents=True)
+    vdir = base / "abc123456789"
+    vdir.mkdir()
+    (vdir / "video.mp4").write_bytes(b"data")
+    # No manifest.json
+
+    s = VideoStore(base_dir=base)
+    record = s.get("abc123456789")
+    assert record.url == ""
+
+
+def test_scan_existing_handles_corrupt_manifest(tmp_path: Path):
+    base = tmp_path / "v"
+    base.mkdir(parents=True)
+    vdir = base / "abc123456789"
+    vdir.mkdir()
+    (vdir / "video.mp4").write_bytes(b"data")
+    (vdir / "manifest.json").write_text("not json{{{")
+
+    s = VideoStore(base_dir=base)
+    record = s.get("abc123456789")
+    assert record.url == ""
+
+
+def test_find_by_url_returns_record(store: VideoStore):
+    video_id, video_dir = store.create_entry("https://example.com/v")
+    file_path = video_dir / "video.mp4"
+    file_path.touch()
+    record = store.register(video_id, "https://example.com/v", file_path)
+
+    found = store.find_by_url("https://example.com/v")
+    assert found is record
+
+
+def test_find_by_url_returns_none_for_unknown(store: VideoStore):
+    assert store.find_by_url("https://example.com/nope") is None
+
+
+def test_find_by_url_skips_expired(tmp_path: Path):
+    s = VideoStore(base_dir=tmp_path / "v", ttl_seconds=1)
+    vid, vdir = s.create_entry("https://example.com/v")
+    f = vdir / "v.mp4"
+    f.write_bytes(b"data")
+    rec = s.register(vid, "https://example.com/v", f)
+    rec.downloaded_at = time.time() - 5
+
+    assert s.find_by_url("https://example.com/v") is None

@@ -84,3 +84,9 @@ async def test_do_download(store_with_video, mock_ydl):
     assert len(video_id) == 12
     record = fresh_store.get(video_id)
     assert record.url == "https://example.com/v"
+
+
+async def test_do_download_dedup_skips_redownload(store_with_video):
+    store, video_id, _ = store_with_video
+    result = await do_download(store, "https://example.com/video")
+    assert result == video_id

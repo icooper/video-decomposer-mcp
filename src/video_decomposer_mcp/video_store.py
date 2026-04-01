@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import shutil
 import tempfile
@@ -40,11 +41,21 @@ class VideoStore:
             if not video_files:
                 continue
             file_path = video_files[0]
+            url = ""
+            downloaded_at = file_path.stat().st_mtime
+            manifest_path = video_dir / "manifest.json"
+            if manifest_path.exists():
+                try:
+                    manifest = json.loads(manifest_path.read_text())
+                    url = manifest.get("url", "")
+                    downloaded_at = manifest.get("downloaded_at", downloaded_at)
+                except (json.JSONDecodeError, KeyError):
+                    pass
             self._videos[video_id] = VideoRecord(
                 video_id=video_id,
-                url="",
+                url=url,
                 file_path=file_path,
-                downloaded_at=file_path.stat().st_mtime,
+                downloaded_at=downloaded_at,
             )
 
     def create_entry(self, url: str) -> tuple[str, Path]:
@@ -62,6 +73,12 @@ class VideoStore:
             downloaded_at=time.time(),
         )
         self._videos[video_id] = record
+        manifest_path = file_path.parent / "manifest.json"
+        manifest_path.write_text(json.dumps({
+            "url": url,
+            "video_id": video_id,
+            "downloaded_at": record.downloaded_at,
+        }))
         logger.debug("Registered video video_id=%s path=%s", video_id, file_path)
         return record
 
@@ -73,6 +90,13 @@ class VideoStore:
             self._evict(video_id)
             raise KeyError(f"Video not found: {video_id}")
         return record
+
+    def find_by_url(self, url: str) -> VideoRecord | None:
+        """Return an existing non-expired record for the given URL, or None."""
+        for record in self._videos.values():
+            if record.url == url and not self._is_expired(record):
+                return record
+        return None
 
     def frames_dir(self, video_id: str) -> Path:
         record = self.get(video_id)

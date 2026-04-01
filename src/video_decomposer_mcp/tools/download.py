@@ -30,6 +30,10 @@ def _download(video_dir: Path, url: str) -> Path:
 
 
 async def do_download(store: VideoStore, url: str) -> str:
+    existing = store.find_by_url(url)
+    if existing is not None:
+        logger.info("Video already downloaded video_id=%s url=%s", existing.video_id, url)
+        return existing.video_id
     logger.info("Downloading video url=%s", url)
     video_id, video_dir = store.create_entry(url)
     loop = asyncio.get_running_loop()
