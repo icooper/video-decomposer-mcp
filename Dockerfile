@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.4.1-devel-ubuntu22.04 AS ffmpeg-builder
+FROM nvidia/cuda:12.8.1-devel-ubuntu22.04 AS ffmpeg-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -45,7 +45,7 @@ RUN curl -sL https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz | tar xJ -C /tmp \
 
 # ---
 
-FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04
 
 # Copy FFmpeg with NVDEC support from builder
 COPY --from=ffmpeg-builder /usr/local/bin/ff* /usr/local/bin/
@@ -61,10 +61,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libvpx7 \
     libopus0 \
     libdav1d5 \
-    curl \
-    ca-certificates \
-    pkg-config \
-    build-essential
+    && rm -rf /var/lib/apt/lists/*
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:0.11.2 /uv /uvx /bin/
@@ -75,20 +72,21 @@ RUN uv python install 3.12
 WORKDIR /app
 
 # Install deps first (cache layer)
-# Build av from source against our NVDEC-enabled FFmpeg
+# Build av from source against our NVDEC-enabled FFmpeg — needs build tools in a single layer
 COPY pyproject.toml uv.lock ./
 ENV UV_NO_BINARY_PACKAGE=av
-RUN uv sync --no-install-project
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    build-essential \
+    && uv sync --no-install-project \
+    && apt-get purge -y build-essential pkg-config \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy source
 COPY src/ src/
 COPY README.md ./
 RUN uv sync
-
-# Remove build tools from final image and clean up apt cache
-RUN apt-get purge -y build-essential pkg-config \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
 
 # MCP server configuration variables
 ENV MCP_HOST=0.0.0.0
