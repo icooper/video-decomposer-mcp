@@ -11,6 +11,7 @@ An MCP server for video decomposition: download videos, transcribe audio with Op
 - [Architecture](#architecture)
 - [Docker and mcp-remote](#docker-and-mcp-remote)
   - [Running the server with Docker Compose](#running-the-server-with-docker-compose)
+  - [Running from a pre-built image](#running-from-a-pre-built-image)
   - [Connecting with mcp-remote](#connecting-with-mcp-remote)
   - [Claude Desktop configuration](#claude-desktop-configuration)
 - [Local Development](#local-development)
@@ -19,7 +20,7 @@ An MCP server for video decomposition: download videos, transcribe audio with Op
 
 ## Features
 
-- **Video download** via yt-dlp -- supports YouTube, Facebook, Instagram, and [1,000+ other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)
+- **Video download** via yt-dlp; supports YouTube, Facebook, Instagram, and [1,000+ other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)
 - **Audio transcription** with OpenAI Whisper, with automatic CUDA acceleration when a GPU is available
 - **Frame extraction** at arbitrary timestamps, returned as base64-encoded JPEGs with configurable resolution and quality
 - **Combined analysis** workflow that downloads and transcribes in one call
@@ -69,7 +70,7 @@ The server exposes four tools over the MCP protocol:
 | `extract_frame`    | `video_id`, `timestamp`, `max_dimension?`, `quality?` | `{type, data, mimeType, timestamp}` | Extract a single frame as a base64-encoded JPEG.                            |
 | `analyze_video`    | `url`, `whisper_model?`                               | `{video_id, transcript}`            | Download + transcribe in one call. Best starting point for video analysis.  |
 
-**`analyze_video`** is the recommended entry point -- it downloads the video and returns a transcript with timestamped segments. Use the returned `video_id` and segment timestamps with `extract_frame` to see what was on screen at specific moments.
+**`analyze_video`** is the recommended entry point; it downloads the video and returns a transcript with timestamped segments. Use the returned `video_id` and segment timestamps with `extract_frame` to see what was on screen at specific moments.
 
 ## CLI Usage
 
@@ -156,6 +157,37 @@ The server listens on port 8000. Whisper models are cached in `./whisper_cache` 
 > **GPU compatibility:** The default configuration uses CUDA 12.8 PyTorch wheels, which support NVIDIA GPUs from Maxwell (sm_50) through Blackwell (sm_120). If you have an older or newer GPU architecture that isn't supported, update the `pytorch-cu128` index URL in `pyproject.toml` to the appropriate version from [PyTorch's install page](https://pytorch.org/get-started/locally/), update the CUDA base images in the `Dockerfile` to match, and run `uv lock` to re-resolve dependencies.
 >
 > **CPU-only:** To run without a GPU, change the `torch` override in `pyproject.toml` to `pytorch-cpu` from `https://download.pytorch.org/whl/cpu`; then run `uv lock`. Transcription will be significantly slower but fully functional.
+
+### Running from a pre-built image
+
+Pre-built images are published to GHCR in two variants:
+
+| Tag suffix | Description                | Example                                            |
+| ---------- | -------------------------- | -------------------------------------------------- |
+| `-cu128`   | CUDA 12.8 with GPU support | `ghcr.io/icooper/video-decomposer-mcp:1.0.0-cu128` |
+| `-cpu`     | CPU-only (no GPU required) | `ghcr.io/icooper/video-decomposer-mcp:1.0.0-cpu`   |
+
+**With an NVIDIA GPU:**
+
+```bash
+docker run --gpus all -p 8000:8000 \
+  -v ./whisper_cache:/root/.cache/whisper \
+  -v ./video_store:/app/video_store \
+  -e VIDEO_STORE_PATH=/app/video_store \
+  ghcr.io/icooper/video-decomposer-mcp:1.0-cu128
+```
+
+**CPU-only:**
+
+```bash
+docker run -p 8000:8000 \
+  -v ./whisper_cache:/root/.cache/whisper \
+  -v ./video_store:/app/video_store \
+  -e VIDEO_STORE_PATH=/app/video_store \
+  ghcr.io/icooper/video-decomposer-mcp:1.0-cpu
+```
+
+Don't use the `latest` tag, always use a version like `1.0` (or like `1.0.0`) with a variant suffix (`-cu128` or `-cpu`). See [video-decomposer-mcp packages](https://github.com/icooper/video-decomposer-mcp/pkgs/container/video-decomposer-mcp) for available versions.
 
 ### Connecting with mcp-remote
 
