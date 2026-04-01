@@ -1,0 +1,17 @@
+services:
+  mcp:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./whisper_cache:/root/.cache/whisper
+      - ./video_store:/app/video_store
+    environment:
+      - VIDEO_STORE_PATH=/app/video_store
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

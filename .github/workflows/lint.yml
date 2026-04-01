@@ -1,0 +1,16 @@
+name: Code Formatting
+
+on:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57
+        with:
+          enable-cache: true
+      - run: uv sync
+      - run: uv run ruff check
+      - run: uv run ruff format --check
