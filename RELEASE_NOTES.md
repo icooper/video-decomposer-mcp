@@ -1,1 +1,2 @@
 - Renamed the `model` parameter to `whisper_model` on `transcribe_video` (MCP tool) and `transcribe`/`preload` (CLI commands) for consistency with `analyze_video`. The CLI flag is now `--whisper-model` everywhere.
+- Added environment variables for configuring default Whisper model (`WHISPER_MODEL`), video store TTL (`VIDEO_STORE_TTL_SECONDS`), and cleanup interval (`VIDEO_STORE_CLEANUP_INTERVAL_SECONDS`).

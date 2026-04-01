@@ -21,13 +21,22 @@ WHISPER_MODEL_DESCRIPTION = (
     'Whisper model size: "turbo" (fast, good quality), "base", "small", "medium", or "large" (slow, best quality)'
 )
 
+# get configuration from environment variables
+store_path = Path(os.environ.get("VIDEO_STORE_PATH", "./video_store"))
+video_store_ttl_seconds = int(os.environ.get("VIDEO_STORE_TTL_SECONDS", "14400"))
+video_store_cleanup_interval_seconds = int(os.environ.get("VIDEO_STORE_CLEANUP_INTERVAL_SECONDS", "600"))
+default_whisper_model = os.environ.get("WHISPER_MODEL", "turbo")
+
+# create video store
+store = VideoStore(store_path, ttl_seconds=video_store_ttl_seconds)
+
 
 @asynccontextmanager
 async def lifespan(app):
 
     # preload the default model ("turbo") on startup to reduce the first-request latency
-    preload_whisper_model("turbo")
-    logger.info("Whisper 'turbo' model preloaded")
+    preload_whisper_model(default_whisper_model)
+    logger.info("Whisper '%s' model preloaded", default_whisper_model)
 
     # start the cleanup loop to remove expired videos from the store every 10 minutes
     task = asyncio.create_task(_cleanup_loop())
@@ -46,7 +55,7 @@ async def lifespan(app):
 
 async def _cleanup_loop():
     while True:
-        await asyncio.sleep(600)
+        await asyncio.sleep(video_store_cleanup_interval_seconds)
         try:
             count = await store.async_cleanup()
             if count > 0:
@@ -61,10 +70,6 @@ mcp = FastMCP(
     port=int(os.environ.get("MCP_PORT", "8000")),
     lifespan=lifespan,
 )
-
-# get video store path from environment variable, defaulting to ./video_store if not set
-store_path = Path(os.environ.get("VIDEO_STORE_PATH", "./video_store"))
-store = VideoStore(store_path)
 
 
 @mcp.tool()
@@ -91,7 +96,7 @@ async def transcribe_video(
     whisper_model: Annotated[
         str,
         Field(description=WHISPER_MODEL_DESCRIPTION),
-    ] = "turbo",
+    ] = default_whisper_model,
 ) -> dict:
     """Transcribe the audio of a previously downloaded video to text using
     OpenAI Whisper. Requires a video_id from download_video or analyze_video.
@@ -148,7 +153,7 @@ async def analyze_video(
     whisper_model: Annotated[
         str,
         Field(description=WHISPER_MODEL_DESCRIPTION),
-    ] = "turbo",
+    ] = default_whisper_model,
 ) -> dict:
     """Analyze a video from a URL — downloads it and transcribes the audio.
     This is the best starting point when a user asks you to watch, review,
