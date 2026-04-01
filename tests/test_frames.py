@@ -80,6 +80,28 @@ def test_extract_frame_at_no_frames(mock_av):
         _extract_frame_at("/fake/video.mp4", 999.0, 768, 75)
 
 
+@patch("video_decomposer_mcp.tools.frames.cv2")
+@patch("video_decomposer_mcp.tools.frames.av")
+def test_extract_frame_at_encode_failure(mock_av, mock_cv2):
+    mock_frame = MagicMock()
+    mock_frame.to_ndarray.return_value = np.zeros((480, 640, 3), dtype=np.uint8)
+
+    mock_stream = MagicMock()
+    mock_stream.time_base = 1 / 1000
+
+    mock_container = MagicMock()
+    mock_container.streams.video = [mock_stream]
+    mock_container.decode.return_value = iter([mock_frame])
+    mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
+    mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_cv2.IMWRITE_JPEG_QUALITY = 1
+    mock_cv2.imencode.return_value = (False, None)
+
+    with pytest.raises(RuntimeError, match="Failed to encode frame as JPEG"):
+        _extract_frame_at("/fake/video.mp4", 5.0, 768, 75)
+
+
 @patch("video_decomposer_mcp.tools.frames._extract_frame_at")
 async def test_do_extract_frame(mock_extract, store_with_video):
     store, video_id, _ = store_with_video

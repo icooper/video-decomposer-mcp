@@ -22,7 +22,9 @@ def _extract_frame_at(video_path: str, timestamp: float, max_dimension: int, qua
     if max(h, w) > max_dimension:
         scale = max_dimension / max(h, w)
         img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-    _, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    if not ok:
+        raise RuntimeError("Failed to encode frame as JPEG")
     return buf.tobytes()
 
 
