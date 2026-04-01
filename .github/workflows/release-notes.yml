@@ -1,0 +1,19 @@
+name: Release Notes Check
+
+on:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check for RELEASE_NOTES.md
+        run: |
+          if [ ! -f RELEASE_NOTES.md ]; then
+            echo "::warning::RELEASE_NOTES.md not found — release notes will be auto-generated if this PR triggers a release."
+            exit 1
+          fi
