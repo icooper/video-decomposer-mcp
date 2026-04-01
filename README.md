@@ -1,6 +1,6 @@
 # Video Decomposer <!-- omit in toc -->
 
-An MCP server for video decomposition: download videos, transcribe audio with OpenAI Whisper (CUDA-accelerated), and extract key frames. Runs as an HTTP MCP server on a machine with an NVIDIA GPU, and includes a CLI for local use.
+An MCP server for video decomposition: download videos, transcribe audio, identify speakers, and extract key frames. Runs as an HTTP MCP server and includes a CLI for local use.
 
 - [Features](#features)
 - [Prerequisites](#prerequisites)
@@ -21,9 +21,10 @@ An MCP server for video decomposition: download videos, transcribe audio with Op
 ## Features
 
 - **Video download** via yt-dlp; supports YouTube, Facebook, Instagram, and [1,000+ other sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)
-- **Audio transcription** with OpenAI Whisper, with automatic CUDA acceleration when a GPU is available
-- **Frame extraction** at arbitrary timestamps, returned as base64-encoded JPEGs with configurable resolution and quality
-- **Combined analysis** workflow that downloads and transcribes in one call
+- **Audio transcription** with [WhisperX](https://github.com/m-bain/whisperX) (faster-whisper backend), with CUDA acceleration when a GPU is available
+- **Speaker diarization** via [pyannote.audio](https://github.com/pyannote/pyannote-audio) — identifies who is speaking in each segment (opt-in via `diarize_speakers`, requires `HF_TOKEN`). Diarization is useful for multi-speaker videos but may occasionally misattribute segments or split a single speaker across multiple labels; review the output if accuracy is critical.
+- **Frame extraction** at arbitrary timestamps, returned as native MCP image content with configurable resolution and quality
+- **Combined analysis** workflow that downloads and transcribes in one call, with optional diarization
 - **Docker image** with GPU passthrough, hardware-accelerated FFmpeg (NVDEC/NVENC), and persistent caching
 - **Automatic cleanup** of downloaded videos after 4 hours
 
@@ -41,10 +42,14 @@ An MCP server for video decomposition: download videos, transcribe audio with Op
 - [uv](https://docs.astral.sh/uv/) package manager
 - NVIDIA GPU + CUDA drivers (for GPU-accelerated transcription)
 - FFmpeg
+- A [Hugging Face access token](https://huggingface.co/settings/tokens) (`HF_TOKEN`) with accepted conditions for [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) (required for speaker diarization)
 
 ## Quick Start
 
 ```bash
+# Set your Hugging Face token for speaker diarization
+export HF_TOKEN=hf_your_token_here
+
 # Start the MCP server with GPU support
 docker compose up --build
 
@@ -63,12 +68,12 @@ uv run cli analyze https://www.youtube.com/watch?v=dQw4w9WgXcQ
 
 The server exposes four tools over the MCP protocol:
 
-| Tool               | Parameters                                            | Returns                             | Description                                                                 |
-| ------------------ | ----------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------- |
-| `download_video`   | `url`                                                 | `video_id` (string)                 | Download a video. Returns an ID for use with other tools.                   |
-| `transcribe_video` | `video_id`, `whisper_model?`                          | `{text, segments}`                  | Transcribe audio to text. Segments include start/end timestamps in seconds. |
-| `extract_frame`    | `video_id`, `timestamp`, `max_dimension?`, `quality?` | `{type, data, mimeType, timestamp}` | Extract a single frame as a base64-encoded JPEG.                            |
-| `analyze_video`    | `url`, `whisper_model?`                               | `{video_id, transcript}`            | Download + transcribe in one call. Best starting point for video analysis.  |
+| Tool               | Parameters                                                        | Returns                             | Description                                                                                     |
+| ------------------ | ----------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `download_video`   | `url`                                                             | `video_id` (string)                 | Download a video. Returns an ID for use with other tools.                                       |
+| `transcribe_video` | `video_id`, `whisper_model?`, `diarize_speakers?`, `align_language?` | `{text, segments}`                  | Transcribe audio. Optionally identify speakers with `diarize_speakers`.                         |
+| `extract_frame`    | `video_id`, `timestamp`, `max_dimension?`, `quality?`                | MCP image content (JPEG)            | Extract a single frame as a JPEG image (max 768px longest edge by default).                     |
+| `analyze_video`    | `url`, `whisper_model?`, `diarize_speakers?`, `align_language?`      | `{video_id, transcript}`            | Download + transcribe in one call. Best starting point for video analysis.                      |
 
 **`analyze_video`** is the recommended entry point; it downloads the video and returns a transcript with timestamped segments. Use the returned `video_id` and segment timestamps with `extract_frame` to see what was on screen at specific moments.
 
@@ -77,9 +82,6 @@ The server exposes four tools over the MCP protocol:
 The CLI provides the same capabilities as the MCP server for local use:
 
 ```bash
-# Preload a Whisper model (useful for warming up)
-uv run cli preload turbo
-
 # Download a video and get its ID
 uv run cli download "<url>"
 
@@ -109,7 +111,7 @@ Whisper supports many languages, but English has the best accuracy; for non-Engl
 
 ## Architecture
 
-The server is built with [FastMCP](https://github.com/modelcontextprotocol/python-sdk) and delegates to tool modules that wrap [yt-dlp](https://github.com/yt-dlp/yt-dlp), [OpenAI Whisper](https://github.com/openai/whisper), [PyAV](https://github.com/pyav-org/pyav), and [OpenCV](https://opencv.org/). All blocking operations (downloading, transcription, frame extraction) run via `asyncio.run_in_executor()` to keep the async event loop responsive.
+The server is built with [FastMCP](https://github.com/modelcontextprotocol/python-sdk) and delegates to tool modules that wrap [yt-dlp](https://github.com/yt-dlp/yt-dlp), [WhisperX](https://github.com/m-bain/whisperX) (faster-whisper + pyannote.audio), [PyAV](https://github.com/pyav-org/pyav), and [OpenCV](https://opencv.org/). All blocking operations (downloading, transcription, diarization, frame extraction) run via `asyncio.run_in_executor()` to keep the async event loop responsive.
 
 A `VideoStore` manages downloaded videos on disk, keyed by short hex IDs. Videos expire after 4 hours, and a background cleanup loop runs every 10 minutes.
 
@@ -118,7 +120,7 @@ graph TD
     Client["Client (Claude, LLM tool, CLI)"]
     MCP["MCP Server<br/><i>server.py</i><br/>SSE on :8000"]
     DL["download<br/><i>yt-dlp</i>"]
-    TR["transcribe<br/><i>Whisper + CUDA</i>"]
+    TR["transcribe<br/><i>WhisperX + pyannote</i>"]
     FR["extract_frame<br/><i>PyAV + OpenCV</i>"]
     AN["analyze<br/><i>download + transcribe</i>"]
     VS["VideoStore<br/><i>temp dir, 4h TTL</i>"]
@@ -155,8 +157,6 @@ The server listens on port 8000. Whisper models are cached in `./whisper_cache` 
 
 > [!NOTE]
 > **GPU compatibility:** The default configuration uses CUDA 12.8 PyTorch wheels, which support NVIDIA GPUs from Maxwell (sm_50) through Blackwell (sm_120). If you have an older or newer GPU architecture that isn't supported, update the `pytorch-cu128` index URL in `pyproject.toml` to the appropriate version from [PyTorch's install page](https://pytorch.org/get-started/locally/), update the CUDA base images in the `Dockerfile` to match, and run `uv lock` to re-resolve dependencies.
->
-> **CPU-only:** To run without a GPU, change the `torch` override in `pyproject.toml` to `pytorch-cpu` from `https://download.pytorch.org/whl/cpu`; then run `uv lock`. Transcription will be significantly slower but fully functional.
 
 ### Running from a pre-built image
 
@@ -234,12 +234,15 @@ Python 3.12 is required. PyTorch is installed from the CUDA 12.8 index configure
 
 ## Configuration
 
-| Variable           | Default         | Description                                                         |
-| ------------------ | --------------- | ------------------------------------------------------------------- |
-| `VIDEO_STORE_PATH` | `./video_store` | Directory for downloaded video files                                |
-| `LOG_LEVEL`        | `INFO`          | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
-
-Downloaded videos are automatically cleaned up after 4 hours.
+| Variable                             | Default         | Description                                                         |
+| ------------------------------------ | --------------- | ------------------------------------------------------------------- |
+| `ALIGN_LANGUAGE`                     | `en`            | Language for the alignment model preloaded at startup               |
+| `HF_TOKEN`                           | *(none)*        | Hugging Face access token for pyannote.audio speaker diarization    |
+| `LOG_LEVEL`                          | `INFO`          | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
+| `VIDEO_STORE_PATH`                   | `./video_store` | Directory for downloaded video files                                |
+| `VIDEO_STORE_TTL_SECONDS`            | `14400`         | Video expiration time in seconds (default 4 hours)                  |
+| `VIDEO_STORE_CLEANUP_INTERVAL_SECONDS` | `600`         | Cleanup loop interval in seconds (default 10 minutes)               |
+| `WHISPER_MODEL`                      | `turbo`         | Default Whisper model to preload and use                            |
 
 ## License
 

@@ -1,8 +1,8 @@
-import base64
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+from mcp.server.fastmcp import Image
 
 from video_decomposer_mcp.tools.frames import (
     _extract_frame_at,
@@ -123,11 +123,9 @@ async def test_do_extract_frame(mock_extract, store_with_video):
 
     result = await do_extract_frame(store, video_id, 5.0)
 
-    assert result["type"] == "image"
-    assert result["mimeType"] == "image/jpeg"
-    assert result["timestamp"] == 5.0
-    decoded = base64.b64decode(result["data"])
-    assert decoded == b"jpeg data"
+    assert isinstance(result, Image)
+    assert result.data == b"jpeg data"
+    assert result._format == "jpeg"
     mock_extract.assert_called_once()
 
 
@@ -142,10 +140,8 @@ async def test_do_extract_frame_cache_hit(mock_extract, store_with_video):
 
     result = await do_extract_frame(store, video_id, 5.0)
 
-    assert result["type"] == "image"
-    assert result["timestamp"] == 5.0
-    decoded = base64.b64decode(result["data"])
-    assert decoded == b"cached jpeg"
+    assert isinstance(result, Image)
+    assert result.data == b"cached jpeg"
     # Should not call _extract_frame_at since cache exists
     mock_extract.assert_not_called()
 

@@ -42,20 +42,40 @@ async def test_transcribe_video_tool(mock_do):
     mock_do.return_value = {"text": "Hello", "segments": []}
     result = await transcribe_video("vid1", "turbo")
     assert result["text"] == "Hello"
-    mock_do.assert_called_once_with(store, "vid1", "turbo")
+    mock_do.assert_called_once_with(store, "vid1", "turbo", False, "auto")
+
+
+@patch("video_decomposer_mcp.server.do_transcribe", new_callable=AsyncMock)
+async def test_transcribe_video_tool_with_diarization(mock_do):
+    mock_do.return_value = {"text": "SPEAKER_00: Hello", "segments": []}
+    result = await transcribe_video("vid1", "turbo", diarize_speakers=True)
+    assert result["text"] == "SPEAKER_00: Hello"
+    mock_do.assert_called_once_with(store, "vid1", "turbo", True, "auto")
+
+
+@patch("video_decomposer_mcp.server.do_transcribe", new_callable=AsyncMock)
+async def test_transcribe_video_tool_explicit_language(mock_do):
+    mock_do.return_value = {"text": "Bonjour", "segments": []}
+    result = await transcribe_video("vid1", "turbo", align_language="fr")
+    assert result["text"] == "Bonjour"
+    mock_do.assert_called_once_with(store, "vid1", "turbo", False, "fr")
 
 
 @patch("video_decomposer_mcp.server.do_extract_frame", new_callable=AsyncMock)
 async def test_extract_frame_tool(mock_do):
-    mock_do.return_value = {"type": "image", "data": "abc", "mimeType": "image/jpeg", "timestamp": 5.0}
+    from mcp.server.fastmcp import Image
+
+    mock_do.return_value = Image(data=b"jpeg", format="jpeg")
     result = await extract_frame("vid1", 5.0)
-    assert result["timestamp"] == 5.0
+    assert isinstance(result, Image)
     mock_do.assert_called_once_with(store, "vid1", 5.0, max_dimension=768, quality=75)
 
 
 @patch("video_decomposer_mcp.server.do_extract_frame", new_callable=AsyncMock)
 async def test_extract_frame_tool_custom_params(mock_do):
-    mock_do.return_value = {"type": "image", "data": "abc", "mimeType": "image/jpeg", "timestamp": 10.5}
+    from mcp.server.fastmcp import Image
+
+    mock_do.return_value = Image(data=b"jpeg", format="jpeg")
     await extract_frame("vid1", 10.5, max_dimension=512, quality=60)
     mock_do.assert_called_once_with(store, "vid1", 10.5, max_dimension=512, quality=60)
 
@@ -64,7 +84,7 @@ async def test_extract_frame_tool_custom_params(mock_do):
 async def test_analyze_video_tool(mock_do):
     mock_do.return_value = {
         "video_id": "v1",
-        "transcript": {"text": "Hi", "segments": []},
+        "transcript": {"text": "SPEAKER_00: Hi", "segments": []},
     }
     result = await analyze_video("https://example.com/v", "turbo")
     assert result["video_id"] == "v1"
@@ -72,6 +92,8 @@ async def test_analyze_video_tool(mock_do):
         store,
         "https://example.com/v",
         "turbo",
+        False,
+        "auto",
     )
 
 
@@ -83,6 +105,34 @@ async def test_analyze_video_tool_custom_model(mock_do):
         store,
         "https://example.com/v",
         "large",
+        False,
+        "auto",
+    )
+
+
+@patch("video_decomposer_mcp.server.do_analyze", new_callable=AsyncMock)
+async def test_analyze_video_tool_with_diarization(mock_do):
+    mock_do.return_value = {"video_id": "v1", "transcript": {"text": "SPEAKER_00: Hi", "segments": []}}
+    await analyze_video("https://example.com/v", "turbo", diarize_speakers=True)
+    mock_do.assert_called_once_with(
+        store,
+        "https://example.com/v",
+        "turbo",
+        True,
+        "auto",
+    )
+
+
+@patch("video_decomposer_mcp.server.do_analyze", new_callable=AsyncMock)
+async def test_analyze_video_tool_explicit_language(mock_do):
+    mock_do.return_value = {"video_id": "v1", "transcript": {"text": "Bonjour", "segments": []}}
+    await analyze_video("https://example.com/v", "turbo", align_language="fr")
+    mock_do.assert_called_once_with(
+        store,
+        "https://example.com/v",
+        "turbo",
+        False,
+        "fr",
     )
 
 
@@ -147,13 +197,28 @@ async def test_lifespan():
         return task
 
     with patch("video_decomposer_mcp.server.preload_whisper_model"):
-        with patch("video_decomposer_mcp.server._cleanup_loop", new_callable=AsyncMock):
-            with patch(
-                "video_decomposer_mcp.server.asyncio.create_task", side_effect=capture_create_task
-            ) as mock_create:
-                async with lifespan(mcp):
-                    mock_create.assert_called_once()
-                    assert len(created_tasks) == 1
-                    assert not created_tasks[0].cancelled()
-                # After exiting lifespan, the task should be cancelled
-                assert created_tasks[0].cancelled()
+        with patch("video_decomposer_mcp.server.preload_align_model"):
+            with patch("video_decomposer_mcp.server.preload_diarization_pipeline"):
+                with patch("video_decomposer_mcp.server._cleanup_loop", new_callable=AsyncMock):
+                    with patch(
+                        "video_decomposer_mcp.server.asyncio.create_task", side_effect=capture_create_task
+                    ) as mock_create:
+                        async with lifespan(mcp):
+                            mock_create.assert_called_once()
+                            assert len(created_tasks) == 1
+                            assert not created_tasks[0].cancelled()
+                        # After exiting lifespan, the task should be cancelled
+                        assert created_tasks[0].cancelled()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_preloads_diarization_when_hf_token_set():
+    from video_decomposer_mcp.server import lifespan
+
+    with patch("video_decomposer_mcp.server.preload_whisper_model"):
+        with patch("video_decomposer_mcp.server.preload_align_model"):
+            with patch("video_decomposer_mcp.server.preload_diarization_pipeline") as mock_diarize:
+                with patch("video_decomposer_mcp.server._cleanup_loop", new_callable=AsyncMock):
+                    with patch("video_decomposer_mcp.server.hf_token", "test-token"):
+                        async with lifespan(mcp):
+                            mock_diarize.assert_called_once()

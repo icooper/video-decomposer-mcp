@@ -1,4 +1,3 @@
-import base64
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -23,17 +22,35 @@ def test_transcribe(mock_transcribe):
     result = runner.invoke(app, ["transcribe", "vid123", "--whisper-model", "base"])
     assert result.exit_code == 0
     assert "Hello world transcript" in result.output
+    mock_transcribe.assert_called_once()
+    call_args = mock_transcribe.call_args
+    assert call_args[0][3] is False  # diarize_speakers default
+    assert call_args[0][4] == "auto"  # align_language default
+
+
+@patch("video_decomposer_mcp.cli.do_transcribe", new_callable=AsyncMock)
+def test_transcribe_no_diarize(mock_transcribe):
+    mock_transcribe.return_value = {"text": "Hello", "segments": []}
+    result = runner.invoke(app, ["transcribe", "vid123", "--no-diarize-speakers"])
+    assert result.exit_code == 0
+    call_args = mock_transcribe.call_args
+    assert call_args[0][3] is False
+
+
+@patch("video_decomposer_mcp.cli.do_transcribe", new_callable=AsyncMock)
+def test_transcribe_explicit_language(mock_transcribe):
+    mock_transcribe.return_value = {"text": "Bonjour", "segments": []}
+    result = runner.invoke(app, ["transcribe", "vid123", "--align-language", "fr"])
+    assert result.exit_code == 0
+    call_args = mock_transcribe.call_args
+    assert call_args[0][4] == "fr"
 
 
 @patch("video_decomposer_mcp.cli.do_extract_frame", new_callable=AsyncMock)
 def test_extract_frame(mock_extract, tmp_path: Path):
-    frame_data = base64.b64encode(b"fake jpeg").decode()
-    mock_extract.return_value = {
-        "type": "image",
-        "data": frame_data,
-        "mimeType": "image/jpeg",
-        "timestamp": 5.0,
-    }
+    from mcp.server.fastmcp import Image
+
+    mock_extract.return_value = Image(data=b"fake jpeg", format="jpeg")
     output_dir = tmp_path / "out"
     result = runner.invoke(app, ["extract-frame", "vid123", "5.0", "--output-dir", str(output_dir)])
     assert result.exit_code == 0
@@ -64,6 +81,30 @@ def test_analyze_custom_model(mock_analyze):
     mock_analyze.assert_called_once()
     call_args = mock_analyze.call_args
     assert call_args[0][2] == "large"
+
+
+@patch("video_decomposer_mcp.cli.do_analyze", new_callable=AsyncMock)
+def test_analyze_no_diarize(mock_analyze):
+    mock_analyze.return_value = {
+        "video_id": "vid999",
+        "transcript": {"text": "text", "segments": []},
+    }
+    result = runner.invoke(app, ["analyze", "https://example.com/v", "--no-diarize-speakers"])
+    assert result.exit_code == 0
+    call_args = mock_analyze.call_args
+    assert call_args[0][3] is False
+
+
+@patch("video_decomposer_mcp.cli.do_analyze", new_callable=AsyncMock)
+def test_analyze_explicit_language(mock_analyze):
+    mock_analyze.return_value = {
+        "video_id": "vid999",
+        "transcript": {"text": "Bonjour", "segments": []},
+    }
+    result = runner.invoke(app, ["analyze", "https://example.com/v", "--align-language", "fr"])
+    assert result.exit_code == 0
+    call_args = mock_analyze.call_args
+    assert call_args[0][4] == "fr"
 
 
 @patch("video_decomposer_mcp.cli.preload_whisper_model")

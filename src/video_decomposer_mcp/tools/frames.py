@@ -1,10 +1,10 @@
 import asyncio
-import base64
 import logging
 from functools import partial
 
 import av
 import cv2
+from mcp.server.fastmcp import Image
 
 from ..video_store import VideoStore
 
@@ -37,7 +37,7 @@ async def do_extract_frame(
     *,
     max_dimension: int = 768,
     quality: int = 75,
-) -> dict:
+) -> Image:
     logger.info("Extracting frame video_id=%s timestamp=%.3f", video_id, timestamp)
     record = store.get(video_id)
     frames_dir = store.frames_dir(video_id)
@@ -62,10 +62,4 @@ async def do_extract_frame(
         )
         cache_path.write_bytes(data)
 
-    encoded = base64.b64encode(data).decode("utf-8")
-    return {
-        "type": "image",
-        "data": encoded,
-        "mimeType": "image/jpeg",
-        "timestamp": timestamp,
-    }
+    return Image(data=data, format="jpeg")

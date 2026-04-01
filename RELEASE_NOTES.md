@@ -1,2 +1,2 @@
-- Renamed the `model` parameter to `whisper_model` on `transcribe_video` (MCP tool) and `transcribe`/`preload` (CLI commands) for consistency with `analyze_video`. The CLI flag is now `--whisper-model` everywhere.
-- Added environment variables for configuring default Whisper model (`WHISPER_MODEL`), video store TTL (`VIDEO_STORE_TTL_SECONDS`), and cleanup interval (`VIDEO_STORE_CLEANUP_INTERVAL_SECONDS`).
+- Added optional speaker diarization: `diarize_speakers` parameter (default: false) on `transcribe_video` and `analyze_video` identifies who said what. Each segment includes a `speaker` field and the full text is annotated with speaker labels. Requires `HF_TOKEN` environment variable.
+- `extract_frame` now returns a native MCP image content block instead of a base64-encoded dict, improving performance for LLM clients.
