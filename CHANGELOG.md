@@ -2,7 +2,7 @@
 
 <!-- version list -->
 
-## v1.2.1 (2026-04-08)
+## v1.2.1 (2026-04-09)
 
 > [!NOTE]
 > No functional changes, only some updates speed up the container build process.
