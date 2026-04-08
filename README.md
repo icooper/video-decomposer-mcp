@@ -16,6 +16,8 @@ An MCP server for video decomposition: download videos, transcribe audio, identi
   - [Claude Desktop configuration](#claude-desktop-configuration)
 - [Local Development](#local-development)
 - [Configuration](#configuration)
+  - [Environment Variables](#environment-variables)
+  - [Volume Mounts](#volume-mounts)
 - [License](#license)
 
 ## Features
@@ -68,12 +70,12 @@ uv run cli analyze https://www.youtube.com/watch?v=dQw4w9WgXcQ
 
 The server exposes four tools over the MCP protocol:
 
-| Tool               | Parameters                                                        | Returns                             | Description                                                                                     |
-| ------------------ | ----------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `download_video`   | `url`                                                             | `video_id` (string)                 | Download a video. Returns an ID for use with other tools.                                       |
-| `transcribe_video` | `video_id`, `whisper_model?`, `diarize_speakers?`, `align_language?` | `{text, segments}`                  | Transcribe audio. Optionally identify speakers with `diarize_speakers`.                         |
-| `extract_frame`    | `video_id`, `timestamp`, `max_dimension?`, `quality?`                | MCP image content (JPEG)            | Extract a single frame as a JPEG image (max 768px longest edge by default).                     |
-| `analyze_video`    | `url`, `whisper_model?`, `diarize_speakers?`, `align_language?`      | `{video_id, transcript}`            | Download + transcribe in one call. Best starting point for video analysis.                      |
+| Tool               | Parameters                                                           | Returns                  | Description                                                                 |
+| ------------------ | -------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------- |
+| `download_video`   | `url`                                                                | `video_id` (string)      | Download a video. Returns an ID for use with other tools.                   |
+| `transcribe_video` | `video_id`, `whisper_model?`, `diarize_speakers?`, `align_language?` | `{text, segments}`       | Transcribe audio. Optionally identify speakers with `diarize_speakers`.     |
+| `extract_frame`    | `video_id`, `timestamp`, `max_dimension?`, `quality?`                | MCP image content (JPEG) | Extract a single frame as a JPEG image (max 768px longest edge by default). |
+| `analyze_video`    | `url`, `whisper_model?`, `diarize_speakers?`, `align_language?`      | `{video_id, transcript}` | Download + transcribe in one call. Best starting point for video analysis.  |
 
 **`analyze_video`** is the recommended entry point; it downloads the video and returns a transcript with timestamped segments. Use the returned `video_id` and segment timestamps with `extract_frame` to see what was on screen at specific moments.
 
@@ -113,7 +115,7 @@ Whisper supports many languages, but English has the best accuracy; for non-Engl
 
 The server is built with [FastMCP](https://github.com/modelcontextprotocol/python-sdk) and delegates to tool modules that wrap [yt-dlp](https://github.com/yt-dlp/yt-dlp), [WhisperX](https://github.com/m-bain/whisperX) (faster-whisper + pyannote.audio), [PyAV](https://github.com/pyav-org/pyav), and [OpenCV](https://opencv.org/). All blocking operations (downloading, transcription, diarization, frame extraction) run via `asyncio.run_in_executor()` to keep the async event loop responsive.
 
-A `VideoStore` manages downloaded videos on disk, keyed by short hex IDs. Videos expire after 4 hours, and a background cleanup loop runs every 10 minutes.
+A `VideoStore` manages downloaded videos on disk, keyed by short hex IDs. Videos expire after 4 hours, and a background cleanup loop runs every 10 minutes. Transcription, alignment, and speaker diarization results are cached as JSON files in each video's directory. Repeated calls with the same parameters skip the expensive GPU computation. Long-running tools report progress via MCP progress notifications to prevent client timeouts.
 
 ```mermaid
 graph TD
@@ -153,7 +155,7 @@ This builds a multi-stage Docker image that includes:
 - FFmpeg 8.0.1 compiled with NVDEC/NVENC support
 - All Python dependencies with PyTorch CUDA 12.8 wheels
 
-The server listens on port 8000. Whisper models are cached in `./whisper_cache` and downloaded videos are stored in `./video_store`, both persisted across container restarts.
+The server listens on port 8000. Downloaded videos are stored in `./video_store`, persisted across container restarts.
 
 > [!NOTE]
 > **GPU compatibility:** The default configuration uses CUDA 12.8 PyTorch wheels, which support NVIDIA GPUs from Maxwell (sm_50) through Blackwell (sm_120). If you have an older or newer GPU architecture that isn't supported, update the `pytorch-cu128` index URL in `pyproject.toml` to the appropriate version from [PyTorch's install page](https://pytorch.org/get-started/locally/), update the CUDA base images in the `Dockerfile` to match, and run `uv lock` to re-resolve dependencies.
@@ -164,31 +166,27 @@ Pre-built images are published to GHCR in two variants:
 
 | Tag suffix | Description                | Example                                            |
 | ---------- | -------------------------- | -------------------------------------------------- |
-| `-cu128`   | CUDA 12.8 with GPU support | `ghcr.io/icooper/video-decomposer-mcp:1.0.0-cu128` |
-| `-cpu`     | CPU-only (no GPU required) | `ghcr.io/icooper/video-decomposer-mcp:1.0.0-cpu`   |
+| `-cu128`   | CUDA 12.8 with GPU support | `ghcr.io/icooper/video-decomposer-mcp:1.2.0-cu128` |
+| `-cpu`     | CPU-only (no GPU required) | `ghcr.io/icooper/video-decomposer-mcp:1.2.0-cpu`   |
 
 **With an NVIDIA GPU:**
 
 ```bash
 docker run --gpus all -p 8000:8000 \
-  -v ./whisper_cache:/root/.cache/whisper \
   -v ./video_store:/app/video_store \
-  -e VIDEO_STORE_PATH=/app/video_store \
-  ghcr.io/icooper/video-decomposer-mcp:1.0.0-cu128
+  ghcr.io/icooper/video-decomposer-mcp:1.2.0-cu128
 ```
 
 **CPU-only:**
 
 ```bash
 docker run -p 8000:8000 \
-  -v ./whisper_cache:/root/.cache/whisper \
   -v ./video_store:/app/video_store \
-  -e VIDEO_STORE_PATH=/app/video_store \
-  ghcr.io/icooper/video-decomposer-mcp:1.0.0-cpu
+  ghcr.io/icooper/video-decomposer-mcp:1.2.0-cpu
 ```
 
 > [!NOTE]
-> Don't use the `latest` tag, always use a version like `1.0.0` (or just `1.0`) with a variant suffix (`-cu128` or `-cpu`). See [video-decomposer-mcp packages](https://github.com/icooper/video-decomposer-mcp/pkgs/container/video-decomposer-mcp) for available versions.
+> Don't use the `latest` tag, always use a version like `1.2.0` (or just `1.2`) with a variant suffix (`-cu128` or `-cpu`). See [video-decomposer-mcp packages](https://github.com/icooper/video-decomposer-mcp/pkgs/container/video-decomposer-mcp) for available versions.
 
 ### Connecting with mcp-remote
 
@@ -234,16 +232,33 @@ Python 3.12 is required. PyTorch is installed from the CUDA 12.8 index configure
 
 ## Configuration
 
-| Variable                             | Default         | Description                                                         |
-| ------------------------------------ | --------------- | ------------------------------------------------------------------- |
-| `ALIGN_LANGUAGE`                     | `en`            | Language for the alignment model preloaded at startup               |
-| `HF_TOKEN`                           | *(none)*        | Hugging Face access token for pyannote.audio speaker diarization    |
-| `LOG_LEVEL`                          | `INFO`          | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
-| `VIDEO_STORE_PATH`                   | `./video_store` | Directory for downloaded video files                                |
-| `VIDEO_STORE_TTL_SECONDS`            | `14400`         | Video expiration time in seconds (default 4 hours)                  |
-| `VIDEO_STORE_CLEANUP_INTERVAL_SECONDS` | `600`         | Cleanup loop interval in seconds (default 10 minutes)               |
-| `WHISPER_MODEL`                      | `turbo`         | Default Whisper model to preload and use                            |
+### Environment Variables
+
+| Variable                               | Default     | Description                                                         |
+| -------------------------------------- | ----------- | ------------------------------------------------------------------- |
+| `HF_TOKEN`                             | _(none)_    | Hugging Face access token for pyannote.audio speaker diarization    |
+| `LOG_LEVEL`                            | `INFO`      | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
+| `MCP_HOST`                             | `127.0.0.1` | Host address the MCP server binds to                                |
+| `MCP_PORT`                             | `8000`      | Port the MCP server listens on                                      |
+| `PRELOAD_ALIGN_LANGUAGE`               | `en`        | Language for the alignment model preloaded at startup               |
+| `VIDEO_STORE_TTL_SECONDS`              | `14400`     | Video expiration time in seconds (defaults to 4 hours)              |
+| `VIDEO_STORE_CLEANUP_INTERVAL_SECONDS` | `600`       | Cleanup loop interval in seconds (defaults to 10 minutes)           |
+| `WHISPER_MODEL`                        | `turbo`     | Default Whisper model to preload and use                            |
+
+### Volume Mounts
+
+These paths within the container can be assigned to Docker volumes to persist data across container restarts.
+
+| Container Path     | Description                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `/app/hf_cache`    | HuggingFace cache, used for transcription and speaker diarization models. Mount to avoid re-downloading models on container restart. |
+| `/app/nltk_data`   | NLTK tokenizer data. Mount to avoid re-downloading on container restart.                                                             |
+| `/app/video_store` | Downloaded videos and cached transcription results. Mount to persist across container restarts.                                      |
+
+> [!TIP]
+> - Assigning `/app/hf_cache` to a volume is beneficial as it removes the need to re-download the models for transcription and speaker diarization every time the container starts.
+> - The default `docker-compose.yml` exposes all GPUs (`device_ids: ["all"]`). To limit to specific GPUs, edit the `device_ids` list (e.g., `["0"]` or `["0", "1"]`).
 
 ## License
 
-See [LICENSE.md](LICENSE.md).
+See [LICENSE.md](./LICENSE.md).

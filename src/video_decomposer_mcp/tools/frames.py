@@ -16,6 +16,10 @@ def _extract_frame_at(video_path: str, timestamp: float, max_dimension: int, qua
         stream = container.streams.video[0]
         if stream.time_base is None:
             raise RuntimeError("Video stream has no time_base")
+        if container.duration is not None:
+            duration_seconds = container.duration / 1_000_000
+            if timestamp > duration_seconds:
+                raise ValueError(f"Timestamp {timestamp:.3f}s exceeds video duration of {duration_seconds:.3f}s")
         target_pts = int(timestamp / stream.time_base)
         container.seek(target_pts, stream=stream)
         frame = next(container.decode(stream))
@@ -38,6 +42,8 @@ async def do_extract_frame(
     max_dimension: int = 768,
     quality: int = 75,
 ) -> Image:
+    if timestamp < 0:
+        raise ValueError(f"Timestamp must be non-negative, got {timestamp}")
     logger.info("Extracting frame video_id=%s timestamp=%.3f", video_id, timestamp)
     record = store.get(video_id)
     frames_dir = store.frames_dir(video_id)

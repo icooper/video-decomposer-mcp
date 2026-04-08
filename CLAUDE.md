@@ -35,5 +35,5 @@ When making user-facing or architectural changes (new features, API changes, or 
 ## Key Patterns
 
 - All blocking operations (yt-dlp, whisperx, pyannote, av/opencv) run via `asyncio.get_running_loop().run_in_executor()` to avoid blocking the async event loop.
-- Tests mock all external libraries (whisperx, pyannote, torch, yt-dlp, av, opencv) — no network or GPU needed to run tests.
+- Tests mock all calls to external libraries (whisperx, pyannote, torch, yt-dlp, av, opencv) so no network, GPU, or video files are needed at test time. The libraries themselves must still be installed since source modules import them at the module level.
 - Python 3.12 is pinned via pyenv (PyTorch compatibility). PyTorch uses CUDA 12.8 index configured in `[tool.uv]`.

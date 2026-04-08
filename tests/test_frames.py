@@ -20,6 +20,7 @@ def test_extract_frame_at(mock_av, mock_cv2):
     mock_stream.time_base = 1 / 1000
 
     mock_container = MagicMock()
+    mock_container.duration = 30_000_000  # 30 seconds in microseconds
     mock_container.streams.video = [mock_stream]
     mock_container.decode.return_value = iter([mock_frame])
     mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
@@ -48,6 +49,7 @@ def test_extract_frame_at_resizes_large_frame(mock_av, mock_cv2):
     mock_stream.time_base = 1 / 1000
 
     mock_container = MagicMock()
+    mock_container.duration = 30_000_000
     mock_container.streams.video = [mock_stream]
     mock_container.decode.return_value = iter([mock_frame])
     mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
@@ -85,13 +87,14 @@ def test_extract_frame_at_no_frames(mock_av):
     mock_stream.time_base = 1 / 1000
 
     mock_container = MagicMock()
+    mock_container.duration = 30_000_000
     mock_container.streams.video = [mock_stream]
     mock_container.decode.return_value = iter([])
     mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
     mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
 
     with pytest.raises(StopIteration):
-        _extract_frame_at("/fake/video.mp4", 999.0, 768, 75)
+        _extract_frame_at("/fake/video.mp4", 5.0, 768, 75)
 
 
 @patch("video_decomposer_mcp.tools.frames.cv2")
@@ -104,6 +107,7 @@ def test_extract_frame_at_encode_failure(mock_av, mock_cv2):
     mock_stream.time_base = 1 / 1000
 
     mock_container = MagicMock()
+    mock_container.duration = 30_000_000
     mock_container.streams.video = [mock_stream]
     mock_container.decode.return_value = iter([mock_frame])
     mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
@@ -114,6 +118,51 @@ def test_extract_frame_at_encode_failure(mock_av, mock_cv2):
 
     with pytest.raises(RuntimeError, match="Failed to encode frame as JPEG"):
         _extract_frame_at("/fake/video.mp4", 5.0, 768, 75)
+
+
+@patch("video_decomposer_mcp.tools.frames.av")
+def test_extract_frame_at_timestamp_exceeds_duration(mock_av):
+    mock_stream = MagicMock()
+    mock_stream.time_base = 1 / 1000
+
+    mock_container = MagicMock()
+    mock_container.duration = 10_000_000  # 10 seconds
+    mock_container.streams.video = [mock_stream]
+    mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
+    mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
+
+    with pytest.raises(ValueError, match="exceeds video duration"):
+        _extract_frame_at("/fake/video.mp4", 15.0, 768, 75)
+
+
+@patch("video_decomposer_mcp.tools.frames.cv2")
+@patch("video_decomposer_mcp.tools.frames.av")
+def test_extract_frame_at_duration_unavailable(mock_av, mock_cv2):
+    mock_frame = MagicMock()
+    mock_frame.to_ndarray.return_value = np.zeros((480, 640, 3), dtype=np.uint8)
+
+    mock_stream = MagicMock()
+    mock_stream.time_base = 1 / 1000
+
+    mock_container = MagicMock()
+    mock_container.duration = None
+    mock_container.streams.video = [mock_stream]
+    mock_container.decode.return_value = iter([mock_frame])
+    mock_av.open.return_value.__enter__ = MagicMock(return_value=mock_container)
+    mock_av.open.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_cv2.IMWRITE_JPEG_QUALITY = 1
+    mock_cv2.imencode.return_value = (True, np.frombuffer(b"jpeg bytes", dtype=np.uint8))
+
+    result = _extract_frame_at("/fake/video.mp4", 999.0, 768, 75)
+    assert result == b"jpeg bytes"
+
+
+async def test_do_extract_frame_negative_timestamp(store_with_video):
+    store, video_id, _ = store_with_video
+
+    with pytest.raises(ValueError, match="Timestamp must be non-negative"):
+        await do_extract_frame(store, video_id, -1.0)
 
 
 @patch("video_decomposer_mcp.tools.frames._extract_frame_at")

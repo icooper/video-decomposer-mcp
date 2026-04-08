@@ -4,14 +4,14 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./whisper_cache:/root/.cache/whisper
       - ./video_store:/app/video_store
-    environment:
-      - VIDEO_STORE_PATH=/app/video_store
+    env_file:
+      - path: .env
+        required: false
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              device_ids: ["all"]  # change to specific GPU IDs if needed
               capabilities: [gpu]

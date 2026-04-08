@@ -1,12 +1,18 @@
 import asyncio
+import json
 import logging
 import os
+import tempfile
 import threading
 from functools import partial
+from pathlib import Path
 from typing import Any
 
+import numpy as np
+import pandas as pd
 import torch
 import whisperx
+from mcp.server.fastmcp import Context
 from whisperx.diarize import DiarizationPipeline
 
 from ..video_store import VideoStore
@@ -82,6 +88,37 @@ def preload_diarization_pipeline() -> None:
     _get_diarization_pipeline()
 
 
+class _NumpyEncoder(json.JSONEncoder):
+    """JSON encoder that handles numpy types from WhisperX output."""
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+
+
+def _read_cache(path: Path) -> Any:
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    return None
+
+
+def _write_cache(path: Path, data: Any) -> None:
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, cls=_NumpyEncoder)
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
 def _build_annotated_text(segments: list[dict]) -> str:
     """Build speaker-annotated text from diarized segments, consolidating adjacent segments from the same speaker."""
     lines = []
@@ -95,30 +132,70 @@ def _build_annotated_text(segments: list[dict]) -> str:
     return "\n".join(f"{speaker}: {text}" for speaker, text in lines)
 
 
-def _transcribe(file_path: str, whisper_model: str, diarize_speakers: bool, align_language: str = "auto") -> dict:
+def _transcribe_stage(file_path: str, video_dir_path: Path, whisper_model: str) -> tuple[dict, Any]:
+    """Run or load cached transcription. Returns (result_dict, audio_or_None)."""
+    transcription_cache_path = video_dir_path / f"transcription_cache_{whisper_model}.json"
+    result = _read_cache(transcription_cache_path)
+    if result is not None:
+        logger.info("Loaded cached transcription for model '%s'", whisper_model)
+        return result, None
+
     audio = whisperx.load_audio(file_path)
     model = _get_whisper_model(whisper_model)
     result = model.transcribe(audio)
-    pipeline = _get_diarization_pipeline() if diarize_speakers else None
+    _write_cache(transcription_cache_path, result)
+    logger.info("Cached transcription for model '%s'", whisper_model)
+    return result, audio
 
-    if pipeline is None:
-        segments = [
-            {"start": seg["start"], "end": seg["end"], "text": seg["text"]} for seg in result.get("segments", [])
-        ]
-        text = "".join(seg["text"] for seg in segments)
-        return {"text": text, "segments": segments}
 
-    # Alignment: get word-level timestamps
+def _align_stage(  # noqa: PLR0913
+    file_path: str, video_dir_path: Path, whisper_model: str, result: dict, audio: Any, align_language: str
+) -> tuple[dict, Any]:
+    """Run or load cached alignment. Returns (aligned_dict, audio_or_None)."""
     language = result.get("language", "en") if align_language == "auto" else align_language
+    alignment_cache_path = video_dir_path / f"alignment_cache_{whisper_model}_{language}.json"
+    aligned = _read_cache(alignment_cache_path)
+    if aligned is not None:
+        logger.info("Loaded cached alignment for model '%s' language '%s'", whisper_model, language)
+        return aligned, audio
+
+    if audio is None:
+        audio = whisperx.load_audio(file_path)
     model_a, metadata = _get_align_model(language)
     aligned = whisperx.align(result["segments"], model_a, metadata, audio, device=_get_device())
+    _write_cache(alignment_cache_path, aligned)
+    logger.info("Cached alignment for model '%s' language '%s'", whisper_model, language)
+    return aligned, audio
 
-    # Diarization: identify speakers
+
+def _diarize_stage(
+    file_path: str, video_dir_path: Path, whisper_model: str, pipeline: DiarizationPipeline, audio: Any
+) -> tuple[Any, Any]:
+    """Run or load cached diarization. Returns (diarize_segments_df, audio_or_None)."""
+
+    # diarization shouldn't depend on the language itself, but we include the model in the cache key since different
+    # models may produce different segmentations that could affect diarization quality
+    diarization_cache_path = video_dir_path / f"diarization_cache_{whisper_model}.json"
+
+    cached = _read_cache(diarization_cache_path)
+    if cached is not None:
+        logger.info("Loaded cached diarization for model '%s'", whisper_model)
+        return pd.DataFrame(cached), audio
+
+    if audio is None:
+        audio = whisperx.load_audio(file_path)
     diarize_segments = pipeline(audio)
+    cache_list = [
+        {"start": row["start"], "end": row["end"], "speaker": row["speaker"]} for _, row in diarize_segments.iterrows()
+    ]
+    _write_cache(diarization_cache_path, cache_list)
+    logger.info("Cached diarization for model '%s'", whisper_model)
+    return diarize_segments, audio
 
-    # Assign speakers to words and segments
+
+def _assign_speakers_stage(diarize_segments: Any, aligned: dict) -> dict:
+    """Assign speakers to segments and build final result."""
     diarized = whisperx.assign_word_speakers(diarize_segments, aligned)
-
     segments = [
         {"start": seg["start"], "end": seg["end"], "text": seg["text"], "speaker": seg.get("speaker", "UNKNOWN")}
         for seg in diarized.get("segments", [])
@@ -127,12 +204,14 @@ def _transcribe(file_path: str, whisper_model: str, diarize_speakers: bool, alig
     return {"text": text, "segments": segments}
 
 
-async def do_transcribe(
+async def do_transcribe(  # noqa: PLR0913
     store: VideoStore,
     video_id: str,
     whisper_model: str = "turbo",
     diarize_speakers: bool = True,
     align_language: str = "auto",
+    *,
+    ctx: Context | None = None,
 ) -> dict:
     logger.info(
         "Transcribing video_id=%s model=%s diarize=%s lang=%s",
@@ -142,9 +221,47 @@ async def do_transcribe(
         align_language,
     )
     record = store.get(video_id)
+    video_dir_path = record.file_path.parent
+    file_path = str(record.file_path)
     loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(
-        None, partial(_transcribe, str(record.file_path), whisper_model, diarize_speakers, align_language)
+
+    # Stage 1: Transcription
+    if ctx:
+        await ctx.report_progress(0, 4, "Transcribing audio...")
+    result, audio = await loop.run_in_executor(
+        None, partial(_transcribe_stage, file_path, video_dir_path, whisper_model)
     )
-    logger.debug("Transcription complete video_id=%s length=%d chars", video_id, len(result["text"]))
-    return result
+
+    pipeline = _get_diarization_pipeline() if diarize_speakers else None
+    if pipeline is None:
+        if ctx:
+            await ctx.report_progress(4, 4, "Transcription complete")
+        segments = [
+            {"start": seg["start"], "end": seg["end"], "text": seg["text"]} for seg in result.get("segments", [])
+        ]
+        text = "".join(seg["text"] for seg in segments)
+        return {"text": text, "segments": segments}
+
+    # Stage 2: Alignment
+    if ctx:
+        await ctx.report_progress(1, 4, "Aligning transcript...")
+    aligned, audio = await loop.run_in_executor(
+        None, partial(_align_stage, file_path, video_dir_path, whisper_model, result, audio, align_language)
+    )
+
+    # Stage 3: Diarization
+    if ctx:
+        await ctx.report_progress(2, 4, "Identifying speakers...")
+    diarize_segments, audio = await loop.run_in_executor(
+        None, partial(_diarize_stage, file_path, video_dir_path, whisper_model, pipeline, audio)
+    )
+
+    # Stage 4: Speaker assignment
+    if ctx:
+        await ctx.report_progress(3, 4, "Assigning speakers to segments...")
+    final = await loop.run_in_executor(None, partial(_assign_speakers_stage, diarize_segments, aligned))
+
+    if ctx:
+        await ctx.report_progress(4, 4, "Transcription complete")
+    logger.debug("Transcription complete video_id=%s length=%d chars", video_id, len(final["text"]))
+    return final
