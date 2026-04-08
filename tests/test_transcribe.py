@@ -466,6 +466,12 @@ def test_read_cache_missing(tmp_path):
     assert _read_cache(tmp_path / "nonexistent.json") is None
 
 
+def test_read_cache_corrupt_json(tmp_path):
+    path = tmp_path / "corrupt.json"
+    path.write_text("{bad json content")
+    assert _read_cache(path) is None
+
+
 def test_write_and_read_cache(tmp_path):
     path = tmp_path / "test_cache.json"
     data = {"language": "en", "segments": [{"start": 0.0, "end": 1.0, "text": "Hello"}]}
@@ -591,18 +597,22 @@ def test_align_stage_loads_audio_when_needed(mock_torch, mock_whisperx, tmp_path
     assert (tmp_path / "alignment_cache_turbo_en.json").exists()
 
 
-def test_auto_language_resolves_in_alignment_cache_filename(tmp_path):
+@patch(f"{TRANSCRIBE_MODULE}.whisperx")
+@patch(f"{TRANSCRIBE_MODULE}.torch")
+def test_auto_language_resolves_in_alignment_cache_filename(mock_torch, mock_whisperx, tmp_path):
     """When align_language='auto', the resolved language appears in the alignment cache filename."""
-    # Pre-populate transcription cache with French language
-    transcription_data = {
-        "language": "fr",
-        "segments": [{"start": 0.0, "end": 1.0, "text": " Bonjour"}],
-    }
-    _write_cache(tmp_path / "transcription_cache_turbo.json", transcription_data)
+    mock_torch.cuda.is_available.return_value = False
+    mock_whisperx.load_align_model.return_value = (MagicMock(), MagicMock())
+    mock_whisperx.align.return_value = {"segments": [{"start": 0.0, "end": 1.0, "text": " Bonjour"}]}
 
-    # Cached transcription returns None audio
-    result = _read_cache(tmp_path / "transcription_cache_turbo.json")
-    assert result["language"] == "fr"
+    result = {"language": "fr", "segments": [{"start": 0.0, "end": 1.0, "text": " Bonjour"}]}
+    audio = MagicMock()
+
+    _align_stage("/fake/path.mp4", tmp_path, "turbo", result, audio, "auto")
+
+    # Should use the auto-detected language "fr" in the cache filename
+    assert (tmp_path / "alignment_cache_turbo_fr.json").exists()
+    assert not (tmp_path / "alignment_cache_turbo_en.json").exists()
 
 
 @patch(f"{TRANSCRIBE_MODULE}.whisperx")

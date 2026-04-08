@@ -103,8 +103,11 @@ class _NumpyEncoder(json.JSONEncoder):
 
 def _read_cache(path: Path) -> Any:
     if path.exists():
-        with open(path) as f:
-            return json.load(f)
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            logger.warning("Corrupt or unreadable cache file %s; treating as cache miss", path)
     return None
 
 

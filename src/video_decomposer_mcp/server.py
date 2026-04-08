@@ -26,7 +26,7 @@ ALIGN_LANGUAGE_DESCRIPTION = (
 )
 
 # get configuration from environment variables
-store_path = Path(os.environ.get("VIDEO_STORE_PATH", "./video_store"))
+store_path = Path(os.environ.get("VIDEO_STORE_PATH", "./video_store"))  # in the container, this is /app/video_store
 video_store_ttl_seconds = int(os.environ.get("VIDEO_STORE_TTL_SECONDS", "14400"))
 video_store_cleanup_interval_seconds = int(os.environ.get("VIDEO_STORE_CLEANUP_INTERVAL_SECONDS", "600"))
 default_whisper_model = os.environ.get("WHISPER_MODEL", "turbo")

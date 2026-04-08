@@ -108,7 +108,7 @@ RUN uv sync
 # Application configuration (defaults match .env.example)
 ENV MCP_HOST=0.0.0.0 \
     MCP_PORT=8000 \
-    VIDEO_STORE=/app/video_store \
+    VIDEO_STORE_PATH=/app/video_store \
     VIDEO_STORE_TTL_SECONDS=14400 \
     VIDEO_STORE_CLEANUP_INTERVAL_SECONDS=600 \
     WHISPER_MODEL=turbo \
