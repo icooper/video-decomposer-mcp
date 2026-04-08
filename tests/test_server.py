@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -151,88 +150,74 @@ async def test_analyze_video_tool_explicit_language(mock_do):
 
 
 @patch("video_decomposer_mcp.server.mcp")
-def test_main(mock_mcp):
+@patch("video_decomposer_mcp.server.threading.Thread")
+@patch("video_decomposer_mcp.tools.transcribe.release_models")
+@patch("video_decomposer_mcp.tools.transcribe.preload_diarization_pipeline")
+@patch("video_decomposer_mcp.tools.transcribe.preload_align_model")
+@patch("video_decomposer_mcp.tools.transcribe.preload_whisper_model")
+def test_main(mock_preload_whisper, mock_preload_align, mock_preload_diarize, mock_release, mock_thread_cls, mock_mcp):  # noqa: PLR0913
+    mock_thread = MagicMock()
+    mock_thread_cls.return_value = mock_thread
+
     main()
+
+    mock_preload_whisper.assert_called_once()
+    mock_preload_align.assert_called_once()
+    mock_release.assert_called_once()
+    mock_thread_cls.assert_called_once_with(target=_cleanup_loop, daemon=True)
+    mock_thread.start.assert_called_once()
     mock_mcp.run.assert_called_once_with(transport="sse")
 
 
-def test_server_has_lifespan():
-    assert mcp.settings.lifespan is not None
+@patch("video_decomposer_mcp.server.mcp")
+@patch("video_decomposer_mcp.server.threading.Thread")
+@patch("video_decomposer_mcp.tools.transcribe.release_models")
+@patch("video_decomposer_mcp.tools.transcribe.preload_diarization_pipeline")
+@patch("video_decomposer_mcp.tools.transcribe.preload_align_model")
+@patch("video_decomposer_mcp.tools.transcribe.preload_whisper_model")
+def test_main_preloads_diarization_when_hf_token_set(  # noqa: PLR0913
+    mock_preload_whisper, mock_preload_align, mock_preload_diarize, mock_release, mock_thread_cls, mock_mcp
+):
+    mock_thread_cls.return_value = MagicMock()
+    with patch("video_decomposer_mcp.server.hf_token", "test-token"):
+        main()
+    mock_preload_diarize.assert_called_once()
 
 
 @patch("video_decomposer_mcp.server.store")
-async def test_cleanup_loop(mock_store):
-    mock_store.async_cleanup = AsyncMock(return_value=2)
+def test_cleanup_loop(mock_store):
+    mock_store.cleanup.return_value = 2
 
     call_count = 0
 
-    async def fake_sleep(seconds):
+    def fake_sleep(seconds):
         nonlocal call_count
         call_count += 1
         if call_count > 1:
-            raise asyncio.CancelledError
+            raise SystemExit
         assert seconds == 600
 
-    with patch("video_decomposer_mcp.server.asyncio.sleep", side_effect=fake_sleep):
-        with pytest.raises(asyncio.CancelledError):
-            await _cleanup_loop()
+    with patch("video_decomposer_mcp.server.time.sleep", side_effect=fake_sleep):
+        with pytest.raises(SystemExit):
+            _cleanup_loop()
 
-    mock_store.async_cleanup.assert_called_once()
+    mock_store.cleanup.assert_called_once()
 
 
 @patch("video_decomposer_mcp.server.store")
-async def test_cleanup_loop_handles_exception(mock_store):
-    mock_store.async_cleanup = AsyncMock(side_effect=RuntimeError("boom"))
+def test_cleanup_loop_handles_exception(mock_store):
+    mock_store.cleanup.side_effect = RuntimeError("boom")
 
     call_count = 0
 
-    async def fake_sleep(seconds):
+    def fake_sleep(seconds):
         nonlocal call_count
         call_count += 1
         if call_count > 1:
-            raise asyncio.CancelledError
+            raise SystemExit
 
-    with patch("video_decomposer_mcp.server.asyncio.sleep", side_effect=fake_sleep):
-        with pytest.raises(asyncio.CancelledError):
-            await _cleanup_loop()
+    with patch("video_decomposer_mcp.server.time.sleep", side_effect=fake_sleep):
+        with pytest.raises(SystemExit):
+            _cleanup_loop()
 
-    mock_store.async_cleanup.assert_called_once()
-
-
-async def test_lifespan():
-    from video_decomposer_mcp.server import lifespan
-
-    created_tasks = []
-    original_create_task = asyncio.create_task
-
-    def capture_create_task(*args, **kwargs):
-        task = original_create_task(*args, **kwargs)
-        created_tasks.append(task)
-        return task
-
-    with patch("video_decomposer_mcp.server.preload_whisper_model"):
-        with patch("video_decomposer_mcp.server.preload_align_model"):
-            with patch("video_decomposer_mcp.server.preload_diarization_pipeline"):
-                with patch("video_decomposer_mcp.server._cleanup_loop", new_callable=AsyncMock):
-                    with patch(
-                        "video_decomposer_mcp.server.asyncio.create_task", side_effect=capture_create_task
-                    ) as mock_create:
-                        async with lifespan(mcp):
-                            mock_create.assert_called_once()
-                            assert len(created_tasks) == 1
-                            assert not created_tasks[0].cancelled()
-                        # After exiting lifespan, the task should be cancelled
-                        assert created_tasks[0].cancelled()
-
-
-@pytest.mark.asyncio
-async def test_lifespan_preloads_diarization_when_hf_token_set():
-    from video_decomposer_mcp.server import lifespan
-
-    with patch("video_decomposer_mcp.server.preload_whisper_model"):
-        with patch("video_decomposer_mcp.server.preload_align_model"):
-            with patch("video_decomposer_mcp.server.preload_diarization_pipeline") as mock_diarize:
-                with patch("video_decomposer_mcp.server._cleanup_loop", new_callable=AsyncMock):
-                    with patch("video_decomposer_mcp.server.hf_token", "test-token"):
-                        async with lifespan(mcp):
-                            mock_diarize.assert_called_once()
+    mock_store.cleanup.assert_called_once()

@@ -21,6 +21,7 @@ from video_decomposer_mcp.tools.transcribe import (
     preload_align_model,
     preload_diarization_pipeline,
     preload_whisper_model,
+    release_models,
 )
 
 
@@ -177,6 +178,41 @@ def test_preload_diarization_pipeline_missing_token(monkeypatch):
     assert "pipeline" not in _diarize_cache
 
 
+# --- Release models ---
+
+
+@patch(f"{TRANSCRIBE_MODULE}.torch")
+def test_release_models_clears_caches(mock_torch):
+    mock_torch.cuda.is_available.return_value = False
+    _whisper_cache["turbo"] = MagicMock()
+    _align_cache["en"] = MagicMock()
+    _diarize_cache["pipeline"] = MagicMock()
+
+    release_models()
+
+    assert len(_whisper_cache) == 0
+    assert len(_align_cache) == 0
+    assert len(_diarize_cache) == 0
+
+
+@patch(f"{TRANSCRIBE_MODULE}.torch")
+def test_release_models_calls_cuda_empty_cache(mock_torch):
+    mock_torch.cuda.is_available.return_value = True
+
+    release_models()
+
+    mock_torch.cuda.empty_cache.assert_called_once()
+
+
+@patch(f"{TRANSCRIBE_MODULE}.torch")
+def test_release_models_skips_cuda_empty_cache_on_cpu(mock_torch):
+    mock_torch.cuda.is_available.return_value = False
+
+    release_models()
+
+    mock_torch.cuda.empty_cache.assert_not_called()
+
+
 @patch(f"{TRANSCRIBE_MODULE}.DiarizationPipeline")
 @patch(f"{TRANSCRIBE_MODULE}.torch")
 def test_get_diarization_pipeline_missing_token_raises(mock_torch, mock_pipeline_cls, monkeypatch):
@@ -325,9 +361,10 @@ def test_build_annotated_text_empty():
 # --- Async wrapper ---
 
 
+@patch(f"{TRANSCRIBE_MODULE}.release_models")
 @patch(f"{TRANSCRIBE_MODULE}._get_diarization_pipeline")
 @patch(f"{TRANSCRIBE_MODULE}._transcribe_stage")
-async def test_do_transcribe_no_diarization(mock_stage, mock_get_pipeline, store_with_video):
+async def test_do_transcribe_no_diarization(mock_stage, mock_get_pipeline, mock_release, store_with_video):
     store, video_id, video_file = store_with_video
     mock_stage.return_value = (
         {"language": "en", "segments": [{"start": 0.0, "end": 1.0, "text": " Hello"}]},
@@ -340,15 +377,17 @@ async def test_do_transcribe_no_diarization(mock_stage, mock_get_pipeline, store
     assert result["text"] == " Hello"
     assert len(result["segments"]) == 1
     mock_stage.assert_called_once()
+    mock_release.assert_called_once()
 
 
+@patch(f"{TRANSCRIBE_MODULE}.release_models")
 @patch(f"{TRANSCRIBE_MODULE}._assign_speakers_stage")
 @patch(f"{TRANSCRIBE_MODULE}._diarize_stage")
 @patch(f"{TRANSCRIBE_MODULE}._align_stage")
 @patch(f"{TRANSCRIBE_MODULE}._get_diarization_pipeline")
 @patch(f"{TRANSCRIBE_MODULE}._transcribe_stage")
 async def test_do_transcribe_with_diarization(  # noqa: PLR0913
-    mock_transcribe_s, mock_get_pipeline, mock_align_s, mock_diarize_s, mock_assign_s, store_with_video
+    mock_transcribe_s, mock_get_pipeline, mock_align_s, mock_diarize_s, mock_assign_s, mock_release, store_with_video
 ):
     store, video_id, _ = store_with_video
     mock_transcribe_s.return_value = ({"language": "en", "segments": []}, None)
@@ -364,15 +403,17 @@ async def test_do_transcribe_with_diarization(  # noqa: PLR0913
     mock_align_s.assert_called_once()
     mock_diarize_s.assert_called_once()
     mock_assign_s.assert_called_once()
+    mock_release.assert_called_once()
 
 
+@patch(f"{TRANSCRIBE_MODULE}.release_models")
 @patch(f"{TRANSCRIBE_MODULE}._assign_speakers_stage")
 @patch(f"{TRANSCRIBE_MODULE}._diarize_stage")
 @patch(f"{TRANSCRIBE_MODULE}._align_stage")
 @patch(f"{TRANSCRIBE_MODULE}._get_diarization_pipeline")
 @patch(f"{TRANSCRIBE_MODULE}._transcribe_stage")
 async def test_do_transcribe_reports_progress(  # noqa: PLR0913
-    mock_transcribe_s, mock_get_pipeline, mock_align_s, mock_diarize_s, mock_assign_s, store_with_video
+    mock_transcribe_s, mock_get_pipeline, mock_align_s, mock_diarize_s, mock_assign_s, mock_release, store_with_video
 ):
     store, video_id, _ = store_with_video
     mock_transcribe_s.return_value = ({"language": "en", "segments": []}, None)
@@ -396,9 +437,12 @@ async def test_do_transcribe_reports_progress(  # noqa: PLR0913
     assert calls[4].args == (4, 4, "Transcription complete")
 
 
+@patch(f"{TRANSCRIBE_MODULE}.release_models")
 @patch(f"{TRANSCRIBE_MODULE}._get_diarization_pipeline")
 @patch(f"{TRANSCRIBE_MODULE}._transcribe_stage")
-async def test_do_transcribe_no_diarization_reports_progress(mock_stage, mock_get_pipeline, store_with_video):
+async def test_do_transcribe_no_diarization_reports_progress(
+    mock_stage, mock_get_pipeline, mock_release, store_with_video
+):
     store, video_id, _ = store_with_video
     mock_stage.return_value = ({"language": "en", "segments": []}, None)
     mock_get_pipeline.return_value = None
@@ -414,9 +458,10 @@ async def test_do_transcribe_no_diarization_reports_progress(mock_stage, mock_ge
     assert calls[1].args == (4, 4, "Transcription complete")
 
 
+@patch(f"{TRANSCRIBE_MODULE}.release_models")
 @patch(f"{TRANSCRIBE_MODULE}._get_diarization_pipeline")
 @patch(f"{TRANSCRIBE_MODULE}._transcribe_stage")
-async def test_do_transcribe_works_without_ctx(mock_stage, mock_get_pipeline, store_with_video):
+async def test_do_transcribe_works_without_ctx(mock_stage, mock_get_pipeline, mock_release, store_with_video):
     store, video_id, _ = store_with_video
     mock_stage.return_value = ({"language": "en", "segments": [{"start": 0.0, "end": 1.0, "text": " Hi"}]}, None)
     mock_get_pipeline.return_value = None
@@ -424,6 +469,18 @@ async def test_do_transcribe_works_without_ctx(mock_stage, mock_get_pipeline, st
     # No ctx passed — should not raise
     result = await do_transcribe(store, video_id, "turbo", diarize_speakers=False)
     assert result["text"] == " Hi"
+
+
+@patch(f"{TRANSCRIBE_MODULE}.release_models")
+@patch(f"{TRANSCRIBE_MODULE}._transcribe_stage")
+async def test_do_transcribe_releases_models_on_error(mock_stage, mock_release, store_with_video):
+    store, video_id, _ = store_with_video
+    mock_stage.side_effect = RuntimeError("transcription failed")
+
+    with pytest.raises(RuntimeError, match="transcription failed"):
+        await do_transcribe(store, video_id, "turbo", diarize_speakers=False)
+
+    mock_release.assert_called_once()
 
 
 # --- NumpyEncoder ---

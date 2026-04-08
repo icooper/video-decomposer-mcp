@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import json
 import logging
 import os
@@ -86,6 +87,18 @@ def preload_align_model(language_code: str) -> None:
 def preload_diarization_pipeline() -> None:
     """Preload the diarization pipeline. Logs a warning and returns if HF_TOKEN is not set."""
     _get_diarization_pipeline()
+
+
+def release_models() -> None:
+    """Release all cached models from memory and free GPU resources."""
+    with _model_lock:
+        _whisper_cache.clear()
+        _align_cache.clear()
+        _diarize_cache.clear()
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    logger.info("Released all models and freed GPU memory")
 
 
 class _NumpyEncoder(json.JSONEncoder):
@@ -228,43 +241,46 @@ async def do_transcribe(  # noqa: PLR0913
     file_path = str(record.file_path)
     loop = asyncio.get_running_loop()
 
-    # Stage 1: Transcription
-    if ctx:
-        await ctx.report_progress(0, 4, "Transcribing audio...")
-    result, audio = await loop.run_in_executor(
-        None, partial(_transcribe_stage, file_path, video_dir_path, whisper_model)
-    )
+    try:
+        # Stage 1: Transcription
+        if ctx:
+            await ctx.report_progress(0, 4, "Transcribing audio...")
+        result, audio = await loop.run_in_executor(
+            None, partial(_transcribe_stage, file_path, video_dir_path, whisper_model)
+        )
 
-    pipeline = _get_diarization_pipeline() if diarize_speakers else None
-    if pipeline is None:
+        pipeline = _get_diarization_pipeline() if diarize_speakers else None
+        if pipeline is None:
+            if ctx:
+                await ctx.report_progress(4, 4, "Transcription complete")
+            segments = [
+                {"start": seg["start"], "end": seg["end"], "text": seg["text"]} for seg in result.get("segments", [])
+            ]
+            text = "".join(seg["text"] for seg in segments)
+            return {"text": text, "segments": segments}
+
+        # Stage 2: Alignment
+        if ctx:
+            await ctx.report_progress(1, 4, "Aligning transcript...")
+        aligned, audio = await loop.run_in_executor(
+            None, partial(_align_stage, file_path, video_dir_path, whisper_model, result, audio, align_language)
+        )
+
+        # Stage 3: Diarization
+        if ctx:
+            await ctx.report_progress(2, 4, "Identifying speakers...")
+        diarize_segments, audio = await loop.run_in_executor(
+            None, partial(_diarize_stage, file_path, video_dir_path, whisper_model, pipeline, audio)
+        )
+
+        # Stage 4: Speaker assignment
+        if ctx:
+            await ctx.report_progress(3, 4, "Assigning speakers to segments...")
+        final = await loop.run_in_executor(None, partial(_assign_speakers_stage, diarize_segments, aligned))
+
         if ctx:
             await ctx.report_progress(4, 4, "Transcription complete")
-        segments = [
-            {"start": seg["start"], "end": seg["end"], "text": seg["text"]} for seg in result.get("segments", [])
-        ]
-        text = "".join(seg["text"] for seg in segments)
-        return {"text": text, "segments": segments}
-
-    # Stage 2: Alignment
-    if ctx:
-        await ctx.report_progress(1, 4, "Aligning transcript...")
-    aligned, audio = await loop.run_in_executor(
-        None, partial(_align_stage, file_path, video_dir_path, whisper_model, result, audio, align_language)
-    )
-
-    # Stage 3: Diarization
-    if ctx:
-        await ctx.report_progress(2, 4, "Identifying speakers...")
-    diarize_segments, audio = await loop.run_in_executor(
-        None, partial(_diarize_stage, file_path, video_dir_path, whisper_model, pipeline, audio)
-    )
-
-    # Stage 4: Speaker assignment
-    if ctx:
-        await ctx.report_progress(3, 4, "Assigning speakers to segments...")
-    final = await loop.run_in_executor(None, partial(_assign_speakers_stage, diarize_segments, aligned))
-
-    if ctx:
-        await ctx.report_progress(4, 4, "Transcription complete")
-    logger.debug("Transcription complete video_id=%s length=%d chars", video_id, len(final["text"]))
-    return final
+        logger.debug("Transcription complete video_id=%s length=%d chars", video_id, len(final["text"]))
+        return final
+    finally:
+        release_models()
