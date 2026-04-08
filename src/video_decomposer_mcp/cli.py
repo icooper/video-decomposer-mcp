@@ -54,7 +54,10 @@ def extract_frame(
     output_dir.mkdir(parents=True, exist_ok=True)
     filename = f"frame_{int(timestamp * 1000):08d}.jpg"
     path = output_dir / filename
-    path.write_bytes(result.data)
+
+    # result.data will never be None since do_extract_frame raises an error if extraction fails
+    path.write_bytes(result.data)  # type: ignore[arg-type]
+
     typer.echo(f"Saved frame at {timestamp}s to {path}")
 
 

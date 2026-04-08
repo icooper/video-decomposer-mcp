@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
-from mcp.server.fastmcp import FastMCP, Image
+from mcp.server.fastmcp import Context, FastMCP, Image
 from pydantic import Field
 
 from . import configure_logging
@@ -26,11 +26,11 @@ ALIGN_LANGUAGE_DESCRIPTION = (
 )
 
 # get configuration from environment variables
-store_path = Path(os.environ.get("VIDEO_STORE_PATH", "./video_store"))
+store_path = Path(os.environ.get("VIDEO_STORE_PATH", "./video_store"))  # in the container, this is /app/video_store
 video_store_ttl_seconds = int(os.environ.get("VIDEO_STORE_TTL_SECONDS", "14400"))
 video_store_cleanup_interval_seconds = int(os.environ.get("VIDEO_STORE_CLEANUP_INTERVAL_SECONDS", "600"))
 default_whisper_model = os.environ.get("WHISPER_MODEL", "turbo")
-default_align_language = os.environ.get("ALIGN_LANGUAGE", "en")
+default_align_language = os.environ.get("PRELOAD_ALIGN_LANGUAGE", "en")
 hf_token = os.environ.get("HF_TOKEN", "")
 
 # create video store
@@ -87,6 +87,7 @@ async def download_video(
     url: Annotated[
         str, Field(description="URL of the video to download (YouTube, Facebook, Instagram, or other supported site)")
     ],
+    ctx: Context | None = None,
 ) -> str:
     """Download a video from a URL without transcribing or extracting frames.
     Use this when you only need to download now and process later, or when
@@ -97,6 +98,8 @@ async def download_video(
     Returns a video_id string. Pass this ID to transcribe_video or
     extract_frame to process the video. Downloaded videos expire after
     4 hours."""
+    if ctx:
+        await ctx.info("Downloading video...")
     return await do_download(store, url)
 
 
@@ -115,6 +118,7 @@ async def transcribe_video(
         str,
         Field(description=ALIGN_LANGUAGE_DESCRIPTION),
     ] = "auto",
+    ctx: Context | None = None,
 ) -> dict:
     """Transcribe the audio of a previously downloaded video to text using
     WhisperX (faster-whisper). Requires a video_id from download_video or
@@ -132,7 +136,7 @@ async def transcribe_video(
     Returns a dict with "text" (the full transcript) and "segments" (a list
     of {start, end, text, speaker?} objects with timestamps in seconds). Use
     the segments to correlate speech with frames from extract_frame."""
-    return await do_transcribe(store, video_id, whisper_model, diarize_speakers, align_language)
+    return await do_transcribe(store, video_id, whisper_model, diarize_speakers, align_language, ctx=ctx)
 
 
 @mcp.tool()
@@ -185,6 +189,7 @@ async def analyze_video(
         str,
         Field(description=ALIGN_LANGUAGE_DESCRIPTION),
     ] = "auto",
+    ctx: Context | None = None,
 ) -> dict:
     """Analyze a video from a URL — downloads it and transcribes the audio
     with optional speaker diarization.
@@ -206,6 +211,7 @@ async def analyze_video(
         whisper_model,
         diarize_speakers,
         align_language,
+        ctx=ctx,
     )
 
 

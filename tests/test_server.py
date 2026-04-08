@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -37,12 +37,22 @@ async def test_download_video_tool(mock_do):
     mock_do.assert_called_once_with(store, "https://example.com/v")
 
 
+@patch("video_decomposer_mcp.server.do_download", new_callable=AsyncMock)
+async def test_download_video_tool_with_ctx(mock_do):
+    mock_do.return_value = "abc123"
+    ctx = MagicMock()
+    ctx.info = AsyncMock()
+    result = await download_video("https://example.com/v", ctx=ctx)
+    assert result == "abc123"
+    ctx.info.assert_called_once_with("Downloading video...")
+
+
 @patch("video_decomposer_mcp.server.do_transcribe", new_callable=AsyncMock)
 async def test_transcribe_video_tool(mock_do):
     mock_do.return_value = {"text": "Hello", "segments": []}
     result = await transcribe_video("vid1", "turbo")
     assert result["text"] == "Hello"
-    mock_do.assert_called_once_with(store, "vid1", "turbo", False, "auto")
+    mock_do.assert_called_once_with(store, "vid1", "turbo", False, "auto", ctx=None)
 
 
 @patch("video_decomposer_mcp.server.do_transcribe", new_callable=AsyncMock)
@@ -50,7 +60,7 @@ async def test_transcribe_video_tool_with_diarization(mock_do):
     mock_do.return_value = {"text": "SPEAKER_00: Hello", "segments": []}
     result = await transcribe_video("vid1", "turbo", diarize_speakers=True)
     assert result["text"] == "SPEAKER_00: Hello"
-    mock_do.assert_called_once_with(store, "vid1", "turbo", True, "auto")
+    mock_do.assert_called_once_with(store, "vid1", "turbo", True, "auto", ctx=None)
 
 
 @patch("video_decomposer_mcp.server.do_transcribe", new_callable=AsyncMock)
@@ -58,7 +68,7 @@ async def test_transcribe_video_tool_explicit_language(mock_do):
     mock_do.return_value = {"text": "Bonjour", "segments": []}
     result = await transcribe_video("vid1", "turbo", align_language="fr")
     assert result["text"] == "Bonjour"
-    mock_do.assert_called_once_with(store, "vid1", "turbo", False, "fr")
+    mock_do.assert_called_once_with(store, "vid1", "turbo", False, "fr", ctx=None)
 
 
 @patch("video_decomposer_mcp.server.do_extract_frame", new_callable=AsyncMock)
@@ -94,6 +104,7 @@ async def test_analyze_video_tool(mock_do):
         "turbo",
         False,
         "auto",
+        ctx=None,
     )
 
 
@@ -107,6 +118,7 @@ async def test_analyze_video_tool_custom_model(mock_do):
         "large",
         False,
         "auto",
+        ctx=None,
     )
 
 
@@ -120,6 +132,7 @@ async def test_analyze_video_tool_with_diarization(mock_do):
         "turbo",
         True,
         "auto",
+        ctx=None,
     )
 
 
@@ -133,6 +146,7 @@ async def test_analyze_video_tool_explicit_language(mock_do):
         "turbo",
         False,
         "fr",
+        ctx=None,
     )
 
 

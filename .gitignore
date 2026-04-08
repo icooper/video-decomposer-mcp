@@ -16,4 +16,3 @@ frames
 
 # for docker compose
 video_store
-whisper_cache
