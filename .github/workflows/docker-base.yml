@@ -50,7 +50,6 @@ jobs:
           provenance: false
           tags: |
             ghcr.io/icooper/video-decomposer-base:${{ inputs.tag }}-${{ matrix.variant }}
-            ghcr.io/icooper/video-decomposer-base:latest-${{ matrix.variant }}
           build-args: |
             BASE_BUILD=${{ matrix.base_build }}
             BASE_RUNTIME=${{ matrix.base_runtime }}

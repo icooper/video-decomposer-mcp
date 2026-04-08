@@ -47,10 +47,13 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/icooper/video-decomposer-mcp
+          flavor: |
+            latest=false
+            suffix=-${{ matrix.variant }}
           tags: |
-            type=semver,pattern={{version}},value=${{ steps.ref.outputs.version }},suffix=-${{ matrix.variant }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ steps.ref.outputs.version }},suffix=-${{ matrix.variant }}
-            type=sha,suffix=-${{ matrix.variant }}
+            type=semver,pattern={{version}},value=${{ steps.ref.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.ref.outputs.version }}
+            type=sha
 
       - uses: docker/build-push-action@v7
         with:
