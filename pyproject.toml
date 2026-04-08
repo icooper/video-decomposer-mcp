@@ -1,6 +1,6 @@
 [project]
 name = "video-decomposer-mcp"
-version = "1.1.0"
+version = "1.2.0"
 description = "MCP server for video decomposition: download, transcribe, and extract key frames"
 readme = "README.md"
 authors = [
