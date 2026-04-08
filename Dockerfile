@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/icooper/video-decomposer-base:latest-cu128
+ARG BASE_IMAGE=ghcr.io/icooper/video-decomposer-base:ffmpeg8.0.1-av17.0.0-cu128
 FROM ${BASE_IMAGE}
 
 LABEL org.opencontainers.image.description="MCP server for video decomposition: download, transcribe, and extract key frames"

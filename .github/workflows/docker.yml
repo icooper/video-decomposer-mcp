@@ -20,10 +20,10 @@ jobs:
       matrix:
         include:
           - variant: cu128
-            base_image: ghcr.io/icooper/video-decomposer-base:latest-cu128
+            base_image: ghcr.io/icooper/video-decomposer-base:ffmpeg8.0.1-av17.0.0-cu128
             torch_index: https://download.pytorch.org/whl/cu128
           - variant: cpu
-            base_image: ghcr.io/icooper/video-decomposer-base:latest-cpu
+            base_image: ghcr.io/icooper/video-decomposer-base:ffmpeg8.0.1-av17.0.0-cpu
             torch_index: https://download.pytorch.org/whl/cpu
     steps:
       - uses: actions/checkout@v6

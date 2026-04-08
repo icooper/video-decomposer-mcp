@@ -58,6 +58,8 @@ RUN CUDA_FLAGS="" && \
 ARG BASE_RUNTIME
 FROM ${BASE_RUNTIME}
 
+LABEL org.opencontainers.image.description="Base image for video decomposition with FFmpeg and PyAV built from source"
+
 # Copy FFmpeg from builder
 COPY --from=ffmpeg-builder /usr/local/bin/ff* /usr/local/bin/
 COPY --from=ffmpeg-builder /usr/local/lib/lib*.so* /usr/local/lib/

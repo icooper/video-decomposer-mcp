@@ -8,7 +8,7 @@ on:
         required: false
         type: string
       tag:
-        description: "Tag for the base image (e.g., ffmpeg8.1-av17.0.0)"
+        description: "Tag for the base image (e.g., ffmpeg8.0.1-av17.0.0)"
         required: true
         type: string
 
