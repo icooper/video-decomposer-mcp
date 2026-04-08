@@ -1,6 +1,6 @@
 [project]
 name = "video-decomposer-mcp"
-version = "1.2.1"
+version = "1.2.2"
 description = "MCP server for video decomposition: download, transcribe, and extract key frames"
 readme = "README.md"
 authors = [{ name = "Ian Cooper", email = "icooper@users.noreply.github.com" }]
