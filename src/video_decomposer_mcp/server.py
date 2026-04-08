@@ -1,7 +1,7 @@
-import asyncio
 import logging
 import os
-from contextlib import asynccontextmanager
+import threading
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -12,7 +12,7 @@ from . import configure_logging
 from .tools.analyze import do_analyze
 from .tools.download import do_download
 from .tools.frames import do_extract_frame
-from .tools.transcribe import do_transcribe, preload_align_model, preload_diarization_pipeline, preload_whisper_model
+from .tools.transcribe import do_transcribe
 from .video_store import VideoStore
 
 logger = logging.getLogger(__name__)
@@ -37,37 +37,12 @@ hf_token = os.environ.get("HF_TOKEN", "")
 store = VideoStore(store_path, ttl_seconds=video_store_ttl_seconds)
 
 
-@asynccontextmanager
-async def lifespan(app):
-    # preload models on startup to reduce the first-request latency
-    preload_whisper_model(default_whisper_model)
-    logger.info("WhisperX '%s' model preloaded", default_whisper_model)
-    preload_align_model(default_align_language)
-    logger.info("Alignment model for '%s' preloaded", default_align_language)
-    if len(hf_token) > 0:
-        preload_diarization_pipeline()
-        logger.info("Diarization pipeline preloaded")
-
-    # start the cleanup loop to remove expired videos from the store every 10 minutes
-    task = asyncio.create_task(_cleanup_loop())
-
-    try:
-        yield
-
-    finally:
-        # stop the cleanup loop on shutdown
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-
-
-async def _cleanup_loop():
+def _cleanup_loop():
+    """Background thread loop to periodically clean up expired videos from the store."""
     while True:
-        await asyncio.sleep(video_store_cleanup_interval_seconds)
+        time.sleep(video_store_cleanup_interval_seconds)
         try:
-            count = await store.async_cleanup()
+            count = store.cleanup()
             if count > 0:
                 logger.info("Cleaned up %d expired videos", count)
         except Exception:
@@ -78,7 +53,6 @@ mcp = FastMCP(
     "Video Decomposer",
     host=os.environ.get("MCP_HOST", "127.0.0.1"),
     port=int(os.environ.get("MCP_PORT", "8000")),
-    lifespan=lifespan,
 )
 
 
@@ -216,4 +190,29 @@ async def analyze_video(
 
 
 def main():
+    from .tools.transcribe import (
+        preload_align_model,
+        preload_diarization_pipeline,
+        preload_whisper_model,
+        release_models,
+    )
+
+    # preload models on startup to download them to disk and reduce the first-request latency
+    preload_whisper_model(default_whisper_model)
+    logger.info("WhisperX '%s' model preloaded", default_whisper_model)
+    preload_align_model(default_align_language)
+    logger.info("Alignment model for '%s' preloaded", default_align_language)
+    if len(hf_token) > 0:
+        preload_diarization_pipeline()
+        logger.info("Diarization pipeline preloaded")
+
+    # release any GPU memory used by the preloading since the models will be loaded again as needed
+    # in each request, and we don't want to waste GPU memory on idle models
+    release_models()
+    logger.info("Released preloaded models from GPU memory")
+
+    # start the background cleanup thread to evict expired videos from the store
+    cleanup_thread = threading.Thread(target=_cleanup_loop, daemon=True)
+    cleanup_thread.start()
+
     mcp.run(transport="sse")

@@ -2,6 +2,12 @@
 
 <!-- version list -->
 
+## v1.2.2 (2026-04-09)
+
+- Models are preloaded on startup to download them to disk, then immediately released from GPU memory.
+- GPU memory is now released after each transcription completes, freeing VRAM for other uses between requests.
+- The video store cleanup loop now runs as a daemon thread instead of per-connection, preventing duplicate cleanup loops when multiple clients connect.
+
 ## v1.2.1 (2026-04-09)
 
 > [!NOTE]
