@@ -3,8 +3,12 @@ name: Publish Base Docker Image
 on:
   workflow_dispatch:
     inputs:
+      ref:
+        description: "Git ref to checkout (tag, branch, or SHA). Leave empty to use the branch selected in Run workflow."
+        required: false
+        type: string
       tag:
-        description: "Tag for the base image (e.g., ffmpeg8.1-av17.0.0)"
+        description: "Tag for the base image (e.g., ffmpeg8.0.1-av17.0.0)"
         required: true
         type: string
 
@@ -27,6 +31,8 @@ jobs:
             ffmpeg_cuda: "0"
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - uses: docker/setup-buildx-action@v4
 
@@ -44,7 +50,6 @@ jobs:
           provenance: false
           tags: |
             ghcr.io/icooper/video-decomposer-base:${{ inputs.tag }}-${{ matrix.variant }}
-            ghcr.io/icooper/video-decomposer-base:latest-${{ matrix.variant }}
           build-args: |
             BASE_BUILD=${{ matrix.base_build }}
             BASE_RUNTIME=${{ matrix.base_runtime }}

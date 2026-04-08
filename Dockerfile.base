@@ -58,6 +58,8 @@ RUN CUDA_FLAGS="" && \
 ARG BASE_RUNTIME
 FROM ${BASE_RUNTIME}
 
+LABEL org.opencontainers.image.description="Base image for video decomposition with FFmpeg and PyAV built from source"
+
 # Copy FFmpeg from builder
 COPY --from=ffmpeg-builder /usr/local/bin/ff* /usr/local/bin/
 COPY --from=ffmpeg-builder /usr/local/lib/lib*.so* /usr/local/lib/
@@ -84,11 +86,10 @@ WORKDIR /app
 
 # Build and install PyAV from source against our custom FFmpeg
 ARG AV_VERSION=17.0.0
-ENV UV_NO_BINARY_PACKAGE=av
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config build-essential \
     && uv venv /app/.venv \
-    && uv pip install --python /app/.venv/bin/python "av==${AV_VERSION}" \
+    && UV_NO_BINARY_PACKAGE=av uv pip install --python /app/.venv/bin/python "av==${AV_VERSION}" \
     && apt-get purge -y build-essential pkg-config \
     && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /usr/local/include /usr/local/lib/pkgconfig

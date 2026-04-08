@@ -60,7 +60,7 @@ cp .env.example .env
 docker compose up
 
 # In another terminal, test with mcp-remote
-npx mcp-remote http://localhost:8000/sse
+npx -y mcp-remote http://localhost:8000/sse
 ```
 
 Or use the CLI directly:

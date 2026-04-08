@@ -20,10 +20,10 @@ jobs:
       matrix:
         include:
           - variant: cu128
-            base_image: ghcr.io/icooper/video-decomposer-base:latest-cu128
+            base_image: ghcr.io/icooper/video-decomposer-base:ffmpeg8.0.1-av17.0.0-cu128
             torch_index: https://download.pytorch.org/whl/cu128
           - variant: cpu
-            base_image: ghcr.io/icooper/video-decomposer-base:latest-cpu
+            base_image: ghcr.io/icooper/video-decomposer-base:ffmpeg8.0.1-av17.0.0-cpu
             torch_index: https://download.pytorch.org/whl/cpu
     steps:
       - uses: actions/checkout@v6
@@ -47,10 +47,13 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/icooper/video-decomposer-mcp
+          flavor: |
+            latest=false
+            suffix=-${{ matrix.variant }}
           tags: |
-            type=semver,pattern={{version}},value=${{ steps.ref.outputs.version }},suffix=-${{ matrix.variant }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ steps.ref.outputs.version }},suffix=-${{ matrix.variant }}
-            type=sha,suffix=-${{ matrix.variant }}
+            type=semver,pattern={{version}},value=${{ steps.ref.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.ref.outputs.version }}
+            type=sha
 
       - uses: docker/build-push-action@v7
         with:

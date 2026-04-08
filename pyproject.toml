@@ -3,16 +3,14 @@ name = "video-decomposer-mcp"
 version = "1.2.0"
 description = "MCP server for video decomposition: download, transcribe, and extract key frames"
 readme = "README.md"
-authors = [
-    { name = "Ian Cooper", email = "icooper@users.noreply.github.com" }
-]
+authors = [{ name = "Ian Cooper", email = "icooper@users.noreply.github.com" }]
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "mcp[cli]>=1.26.0",
     "yt-dlp",
     "whisperx>=3.1",
     "torchaudio",
-    "av>=17",
+    "av==17.0.0",             # changes to this version require changes to the Docker base image
     "opencv-python-headless",
     "torch",
     "typer",
@@ -27,13 +25,7 @@ requires = ["uv_build>=0.11.2,<0.12.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "pytest",
-    "pytest-cov",
-    "pytest-asyncio",
-    "ruff",
-    "pre-commit",
-]
+dev = ["pytest", "pytest-cov", "pytest-asyncio", "ruff", "pre-commit"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

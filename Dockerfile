@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=ghcr.io/icooper/video-decomposer-base:latest-cu128
+ARG BASE_IMAGE=ghcr.io/icooper/video-decomposer-base:ffmpeg8.0.1-av17.0.0-cu128
 FROM ${BASE_IMAGE}
 
 LABEL org.opencontainers.image.description="MCP server for video decomposition: download, transcribe, and extract key frames"
@@ -13,7 +13,6 @@ ENV UV_INDEX="pytorch-cu128=${TORCH_INDEX_URL}" \
 # Install all Python deps (torch, whisperx, etc.) into the base venv.
 # av is pre-installed from the base image and will be skipped.
 COPY pyproject.toml uv.lock ./
-ENV UV_NO_BINARY_PACKAGE=av
 RUN uv sync --no-install-project
 
 # Copy source
