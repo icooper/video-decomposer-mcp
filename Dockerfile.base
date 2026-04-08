@@ -84,11 +84,10 @@ WORKDIR /app
 
 # Build and install PyAV from source against our custom FFmpeg
 ARG AV_VERSION=17.0.0
-ENV UV_NO_BINARY_PACKAGE=av
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config build-essential \
     && uv venv /app/.venv \
-    && uv pip install --python /app/.venv/bin/python "av==${AV_VERSION}" \
+    && UV_NO_BINARY_PACKAGE=av uv pip install --python /app/.venv/bin/python "av==${AV_VERSION}" \
     && apt-get purge -y build-essential pkg-config \
     && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /usr/local/include /usr/local/lib/pkgconfig

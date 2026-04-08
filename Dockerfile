@@ -13,7 +13,6 @@ ENV UV_INDEX="pytorch-cu128=${TORCH_INDEX_URL}" \
 # Install all Python deps (torch, whisperx, etc.) into the base venv.
 # av is pre-installed from the base image and will be skipped.
 COPY pyproject.toml uv.lock ./
-ENV UV_NO_BINARY_PACKAGE=av
 RUN uv sync --no-install-project
 
 # Copy source
