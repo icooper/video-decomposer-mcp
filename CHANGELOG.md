@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.1 (2026-04-08)
+
+> [!NOTE]
+> No functional changes, only some updates speed up the container build process.
+
+- Split FFmpeg and PyAV builds into a separate base Docker image (`Dockerfile.base`) to dramatically speed up app image builds
+- Add `docker-base.yml` workflow to manually build and push the base image
+
 ## v1.2.0 (2026-04-08)
 
 - Cache transcription, alignment, and diarization results to disk per video. Repeated transcriptions skip expensive computation entirely when all caches hit.

@@ -20,15 +20,11 @@ jobs:
       matrix:
         include:
           - variant: cu128
-            base_build: nvidia/cuda:12.8.1-devel-ubuntu22.04
-            base_runtime: nvidia/cuda:12.8.1-runtime-ubuntu22.04
+            base_image: ghcr.io/icooper/video-decomposer-base:latest-cu128
             torch_index: https://download.pytorch.org/whl/cu128
-            ffmpeg_cuda: "1"
           - variant: cpu
-            base_build: ubuntu:22.04
-            base_runtime: ubuntu:22.04
+            base_image: ghcr.io/icooper/video-decomposer-base:latest-cpu
             torch_index: https://download.pytorch.org/whl/cpu
-            ffmpeg_cuda: "0"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -64,9 +60,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BASE_BUILD=${{ matrix.base_build }}
-            BASE_RUNTIME=${{ matrix.base_runtime }}
+            BASE_IMAGE=${{ matrix.base_image }}
             TORCH_INDEX_URL=${{ matrix.torch_index }}
-            FFMPEG_CUDA=${{ matrix.ffmpeg_cuda }}
           cache-from: type=gha,scope=${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=${{ matrix.variant }}

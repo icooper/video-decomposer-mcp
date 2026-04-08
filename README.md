@@ -10,7 +10,7 @@ An MCP server for video decomposition: download videos, transcribe audio, identi
 - [Whisper Models](#whisper-models)
 - [Architecture](#architecture)
 - [Docker and mcp-remote](#docker-and-mcp-remote)
-  - [Running the server with Docker Compose](#running-the-server-with-docker-compose)
+  - [Building and running with Docker](#building-and-running-with-docker)
   - [Running from a pre-built image](#running-from-a-pre-built-image)
   - [Connecting with mcp-remote](#connecting-with-mcp-remote)
   - [Claude Desktop configuration](#claude-desktop-configuration)
@@ -49,11 +49,15 @@ An MCP server for video decomposition: download videos, transcribe audio, identi
 ## Quick Start
 
 ```bash
-# Set your Hugging Face token for speaker diarization
-export HF_TOKEN=hf_your_token_here
+# Set up environment
+cp .env.example .env
+# edit .env to add HF_TOKEN for speaker diarization model
 
-# Start the MCP server with GPU support
-docker compose up --build
+# Build the Docker images locally (CUDA variant by default)
+./build-local.sh
+
+# Start the MCP server
+docker compose up
 
 # In another terminal, test with mcp-remote
 npx mcp-remote http://localhost:8000/sse
@@ -141,40 +145,46 @@ graph TD
 
 ## Docker and mcp-remote
 
-### Running the server with Docker Compose
+### Building and running with Docker
 
-The included `docker-compose.yml` runs the MCP server with NVIDIA GPU passthrough and persistent volumes for the Whisper model cache and downloaded videos:
+Build the base image (FFmpeg + PyAV) and app image locally:
 
 ```bash
-docker compose up --build
+# CUDA variant (default)
+./build-local.sh
+
+# Or CPU-only variant
+./build-local.sh cpu
 ```
 
-This builds a multi-stage Docker image that includes:
+The base image (`Dockerfile.base`) contains FFmpeg compiled with NVDEC/NVENC and PyAV built from source. It rarely changes and only needs rebuilding when FFmpeg or PyAV versions are bumped. The app image (`Dockerfile`) layers Python dependencies and source on top.
 
-- NVIDIA CUDA 12.8 runtime
-- FFmpeg 8.0.1 compiled with NVDEC/NVENC support
-- All Python dependencies with PyTorch CUDA 12.8 wheels
+Then start the server:
+
+```bash
+docker compose up
+```
 
 The server listens on port 8000. Downloaded videos are stored in `./video_store`, persisted across container restarts.
 
 > [!NOTE]
-> **GPU compatibility:** The default configuration uses CUDA 12.8 PyTorch wheels, which support NVIDIA GPUs from Maxwell (sm_50) through Blackwell (sm_120). If you have an older or newer GPU architecture that isn't supported, update the `pytorch-cu128` index URL in `pyproject.toml` to the appropriate version from [PyTorch's install page](https://pytorch.org/get-started/locally/), update the CUDA base images in the `Dockerfile` to match, and run `uv lock` to re-resolve dependencies.
+> **GPU compatibility:** The default configuration uses CUDA 12.8 PyTorch wheels, which support NVIDIA GPUs from Maxwell (sm_50) through Blackwell (sm_120). If you have an older or newer GPU architecture that isn't supported, update the `pytorch-cu128` index URL in `pyproject.toml` to the appropriate version from [PyTorch's install page](https://pytorch.org/get-started/locally/) and update the CUDA base images in `Dockerfile.base` to match.
 
 ### Running from a pre-built image
 
 Pre-built images are published to GHCR in two variants:
 
-| Tag suffix | Description                | Example                                            |
-| ---------- | -------------------------- | -------------------------------------------------- |
-| `-cu128`   | CUDA 12.8 with GPU support | `ghcr.io/icooper/video-decomposer-mcp:1.2.0-cu128` |
-| `-cpu`     | CPU-only (no GPU required) | `ghcr.io/icooper/video-decomposer-mcp:1.2.0-cpu`   |
+| Tag suffix | Description                | Example                                                |
+| ---------- | -------------------------- | ------------------------------------------------------ |
+| `-cu128`   | CUDA 12.8 with GPU support | `ghcr.io/icooper/video-decomposer-mcp:<version>-cu128` |
+| `-cpu`     | CPU-only (no GPU required) | `ghcr.io/icooper/video-decomposer-mcp:<version>-cpu`   |
 
 **With an NVIDIA GPU:**
 
 ```bash
 docker run --gpus all -p 8000:8000 \
   -v ./video_store:/app/video_store \
-  ghcr.io/icooper/video-decomposer-mcp:1.2.0-cu128
+  ghcr.io/icooper/video-decomposer-mcp:<version>-cu128
 ```
 
 **CPU-only:**
@@ -182,38 +192,38 @@ docker run --gpus all -p 8000:8000 \
 ```bash
 docker run -p 8000:8000 \
   -v ./video_store:/app/video_store \
-  ghcr.io/icooper/video-decomposer-mcp:1.2.0-cpu
+  ghcr.io/icooper/video-decomposer-mcp:<version>-cpu
 ```
 
 > [!NOTE]
-> Don't use the `latest` tag, always use a version like `1.2.0` (or just `1.2`) with a variant suffix (`-cu128` or `-cpu`). See [video-decomposer-mcp packages](https://github.com/icooper/video-decomposer-mcp/pkgs/container/video-decomposer-mcp) for available versions.
+> Replace `<version>` with a specific release (e.g., `1.2.0` or `1.2`). Don't use `latest`. See [video-decomposer-mcp packages](https://github.com/icooper/video-decomposer-mcp/pkgs/container/video-decomposer-mcp) for available versions.
 
 ### Connecting with mcp-remote
 
 [mcp-remote](https://github.com/geelen/mcp-remote) bridges an HTTP/SSE MCP server to the stdio transport that most LLM tools expect. This lets you use Video Decomposer with any MCP-compatible client:
 
 ```bash
-npx mcp-remote http://YOUR_HOST:8000/sse
+npx -y mcp-remote http://YOUR_HOST:8000/sse
 ```
 
 Replace `YOUR_HOST` with the hostname or IP of the machine running the server.
 
 ### Claude Desktop configuration
 
-Add this to your `claude_desktop_config.json` to make Video Decomposer available in Claude Desktop:
+Add this to your `claude_desktop_config.json` to make the video decomposer tools available in Claude Desktop:
 
 ```json
 {
   "mcpServers": {
     "video-decomposer": {
       "command": "npx",
-      "args": ["mcp-remote", "http://YOUR_HOST:8000/sse"]
+      "args": ["-y", "mcp-remote", "http://YOUR_HOST:8000/sse"]
     }
   }
 }
 ```
 
-This works with any MCP client that supports stdio servers.
+A similar approach should work with any other MCP client that supports stdio servers.
 
 ## Local Development
 

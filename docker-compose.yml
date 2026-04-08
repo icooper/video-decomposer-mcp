@@ -1,6 +1,6 @@
 services:
   mcp:
-    build: .
+    image: video-decomposer-mcp:local-cu128
     ports:
       - "8000:8000"
     volumes:
