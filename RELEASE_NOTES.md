@@ -1,2 +1,0 @@
-- Cache transcription, alignment, and diarization results to disk per video. Repeated transcriptions skip expensive computation entirely when all caches hit.
-- Report progress during transcription via MCP progress notifications, reducing the occurrence of client timeouts on long videos.
